@@ -203,12 +203,12 @@ The POC is scoped as a branch (`walrus-poc`) off a tagged baseline (`v0-baseline
 #### Acceptance Criteria
 
 1. WHEN the Owner opens the Form_Builder_UI, THE POC_System SHALL display controls for setting a form title of 1 to 200 characters and for adding, editing, reordering, and removing up to 50 fields per form.
-2. WHEN the Owner adds a field, THE Form_Builder_UI SHALL allow selecting a field type from the set `text`, `long_text`, `number`, `email`, `url`, `select`, `checkbox` and setting a label of 1 to 100 characters.
+2. WHEN the Owner adds a field, THE Form_Builder_UI SHALL allow selecting a field type from the set `text`, `textarea`, `email`, `number`, `select`, `checkbox` and setting a label of 1 to 100 characters.
 3. WHEN the Owner saves the form, THE POC_System SHALL serialize the Form_Schema via the Pretty_Printer, encrypt the serialized output via the Seal_Encryptor, upload the Encrypted_Blob via the Walrus_Client within 30 seconds, and return a non-empty Blob_ID string.
 4. WHEN the Blob_ID is returned, THE POC_System SHALL store an entry in the Local_Store containing the Blob_ID, the Schema_Hash, the Owner's address, and the `created_at` timestamp in ISO 8601 UTC format.
 5. WHEN the Owner lists their forms, THE Form_Builder_UI SHALL display each form's title, Blob_ID, and `created_at` timestamp from the Local_Store, ordered by `created_at` descending (most recent first).
 6. WHEN the Owner opens a previously saved form by Blob_ID, THE POC_System SHALL retrieve the Encrypted_Blob from Walrus within 30 seconds, decrypt it via the Seal_Decryptor, and render the Form_Schema in the Form_Builder_UI.
-7. IF the Form_Schema fails Validator checks before upload, THEN THE Form_Builder_UI SHALL display a validation error identifying each failing field by label and the specific rule violated (missing title, empty label, unsupported field type, or field count exceeded), and SHALL NOT initiate the upload, preserving all Owner-entered data in the editor.
+7. IF the Form_Schema fails Validator checks before upload, THEN THE Form_Builder_UI SHALL display a validation error identifying each failing field by label and the specific rule violated (missing title, empty label, unsupported field type (field type is not one of `text`, `textarea`, `email`, `number`, `select`, `checkbox`), or field count exceeded), and SHALL NOT initiate the upload, preserving all Owner-entered data in the editor.
 8. IF the Seal_Encryptor or Walrus_Client fails during save, THEN THE POC_System SHALL display an error message indicating the failing stage (encryption or upload), SHALL NOT create a Local_Store entry, and SHALL preserve all Owner-entered data in the editor.
 9. IF the Walrus_Client cannot retrieve the Encrypted_Blob or the Seal_Decryptor fails during open, THEN THE POC_System SHALL display an error message indicating the failing stage (retrieval or decryption) and SHALL NOT render a partial Form_Schema in the Form_Builder_UI.
 
