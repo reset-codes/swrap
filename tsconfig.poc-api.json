@@ -1,0 +1,16 @@
+{
+  "//": "POC api type-check config. Used ONLY for `tsc --noEmit` verification of apps/api/** + its package deps (packages/shared, seal, walrus, sui). Inherits path aliases and compiler options from the root tsconfig.json; narrows `include` so that this check fails fast on api-surface breakage without scanning src/app/** production code.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false
+  },
+  "include": [
+    "apps/api/**/*.ts",
+    "packages/shared/src/**/*.ts",
+    "packages/seal/src/**/*.ts",
+    "packages/walrus/src/**/*.ts",
+    "packages/sui/src/**/*.ts"
+  ],
+  "exclude": ["node_modules", ".next", "apps/web/**", "src/**"]
+}

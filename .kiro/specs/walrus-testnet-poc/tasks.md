@@ -19,43 +19,43 @@ This plan implements the Walrus Testnet POC on branch `walrus-poc` (forked from 
 ## Tasks
 
 - [ ] 1. Phase 0 — Baseline + monorepo scaffolding
-  - [ ] 1.1 Confirm baseline and branch prerequisites
+  - [x] 1.1 Confirm baseline and branch prerequisites
     - Verify `git rev-parse v0-baseline` resolves and `git merge-base --is-ancestor v0-baseline HEAD` exits 0 on the current `walrus-poc` branch.
     - Add `scripts/check-baseline.sh` that runs both checks and fails fast with a descriptive error if either is missing.
     - _Requirements: R1.3, R1.4, R16.5_
 
-  - [ ] 1.2 Create `apps/` and `packages/` directory skeleton
+  - [x] 1.2 Create `apps/` and `packages/` directory skeleton
     - Create empty-but-real folders: `apps/web/{pages,components/ui,components/layout,components/forms,components/walrus,components/submissions,stores,copy}`, `apps/api/`, `packages/{shared,seal,walrus,sui}/src/`, `packages/sui/move/sealbase_poc/sources/`.
     - Add one `index.ts` per package re-exporting `export {}` so TypeScript `include` finds each folder.
     - Leave `src/app/poc/` and `src/app/api/poc/` as placeholder folders with a single `.gitkeep`; real wrappers land in later phases.
     - _Requirements: R14.1, R14.7_
 
-  - [ ] 1.3 Wire tsconfig path aliases and include globs
+  - [x] 1.3 Wire tsconfig path aliases and include globs
     - Extend `tsconfig.json` `compilerOptions.paths` with `@poc/shared`, `@poc/shared/*`, `@poc/seal`, `@poc/seal/*`, `@poc/walrus`, `@poc/walrus/*`, `@poc/sui`, `@poc/sui/*`, `@poc/apps/web`, `@poc/apps/web/*`, `@poc/apps/api`, `@poc/apps/api/*`.
     - Extend `include` with `"apps/**/*", "packages/**/*"`.
     - Add narrower `tsconfig.poc.json` and `tsconfig.poc-api.json` configs (extends root) with `include` limited to `apps/web/**` + package deps and `apps/api/**` + package deps respectively, each used only for `tsc --noEmit` verification.
     - Confirm `npm run type-check` still passes.
     - _Requirements: R14.1, R14.6, R14.8_
 
-  - [ ] 1.4 Install test runner, fast-check, and dev dependencies
+  - [x] 1.4 Install test runner, fast-check, and dev dependencies
     - Add devDependencies to root `package.json`: `vitest`, `@vitest/ui`, `vite-tsconfig-paths`, `fast-check`, `msw`, `js-yaml`, `@types/js-yaml`, `wcag-contrast` (or `@adobe/leonardo-contrast-colors`).
     - Add scripts: `test`, `test:run` (`vitest run`), `test:pbt` (`vitest run --dir packages --reporter=verbose`), `lint:ui` (placeholder echoing "ok" until Phase 4 adds the real composite).
     - Create root `vitest.config.ts` with `plugins: [tsconfigPaths()]`, `test.include: ['apps/**/*.test.ts', 'apps/**/*.test.tsx', 'packages/**/*.test.ts']`, `test.environment: 'node'` (overridable per-file for jsdom where needed).
     - _Requirements: R17 (enables all invariants), R14.6_
 
-  - [ ] 1.5 Create `packages/shared/src/design-tokens.ts` with exact tables from design.md
+  - [x] 1.5 Create `packages/shared/src/design-tokens.ts` with exact tables from design.md
     - Export `spacing`, `radius`, `typography`, `color`, `elevation`, `motion`, `focusRing` objects exactly as specified in design.md §"Design_Tokens module".
     - Every export is `as const` with matching TypeScript types (`Spacing`, `Radius`, etc.).
     - Re-export from `packages/shared/src/index.ts`.
     - _Requirements: R19.1, R19.2, R19.4_
 
-  - [ ] 1.6 Bind Tailwind config to Design_Tokens programmatically
+  - [x] 1.6 Bind Tailwind config to Design_Tokens programmatically
     - Rewrite `tailwind.config.ts` on `walrus-poc` so `theme.extend.spacing`, `colors`, `borderRadius`, `boxShadow`, `fontFamily`, `fontSize`, and `transitionDuration` are produced by a local helper (e.g. `buildTailwindTheme()`) that imports from `@poc/shared` and maps tokens to Tailwind keys.
     - Add `theme.screens` breakpoints sourced from `design-tokens` (360, 768, 1280, 1536, 1920 px).
     - Confirm `npm run build` still succeeds on the existing `src/app/**` pages (no visual regressions are acceptable since the existing Tailwind color set is a superset of the token palette — mapping must preserve current named keys).
     - _Requirements: R19.1, R19.4_
 
-  - [ ] 1.7 Add POC-scoped ESLint rules
+  - [x] 1.7 Add POC-scoped ESLint rules
     - Extend `.eslintrc.json` with an `overrides` block scoped to `apps/web/**` and `src/app/poc/**`:
       - `no-restricted-syntax` patterns:
         - `Literal[value=/class(Name)?="[^"]*\[/]` (arbitrary-value Tailwind classes)
@@ -67,13 +67,13 @@ This plan implements the Walrus Testnet POC on branch `walrus-poc` (forked from 
     - Confirm `npm run lint` passes on the empty scaffolding.
     - _Requirements: R14.2, R14.3, R14.4, R14.5, R19.2, R19.8, R19.11, R19.12_
 
-  - [ ] 1.8 Add `scripts/phase-verify.sh` reusable phase gate
+  - [x] 1.8 Add `scripts/phase-verify.sh` reusable phase gate
     - Shell script at `scripts/phase-verify.sh` executing, in order: `npm run type-check`, `npm run lint`, `npm run build`, `npm run test:run`, a curl happy-path smoke probe against `/api/poc/health` (skipped when the route doesn't exist yet via `--allow-missing-route` flag), and `git merge-base --is-ancestor v0-baseline HEAD`.
     - Exit non-zero with a clear stage label on first failure.
     - `chmod +x`; verify it runs green on the current empty scaffolding.
     - _Requirements: R16.2, R16.3, R16.4, R16.5, R16.6, R14.6, R14.8_
 
-  - [ ] 1.9 Phase 0 checkpoint and commit
+  - [-] 1.9 Phase 0 checkpoint and commit
     - Run `scripts/phase-verify.sh` — expect green.
     - Commit on `walrus-poc` with message `feat: scaffold walrus-poc monorepo and design tokens`.
     - Ensure all tests pass, ask the user if questions arise.

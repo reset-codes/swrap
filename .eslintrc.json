@@ -12,5 +12,71 @@
     // React rules
     "react/prop-types": "off",
     "react/react-in-jsx-scope": "off"
-  }
+  },
+  "overrides": [
+    {
+      "files": ["apps/web/**", "src/app/poc/**"],
+      "rules": {
+        "no-restricted-syntax": [
+          "error",
+          {
+            "selector": "Literal[value=/class(Name)?=\"[^\"]*\\[/]",
+            "message": "Arbitrary-value Tailwind classes are not allowed in POC code. Use design tokens instead."
+          },
+          {
+            "selector": "Literal[value=/#[0-9a-fA-F]{3,8}/]",
+            "message": "Hex color literals are not allowed in POC code. Use design tokens instead."
+          },
+          {
+            "selector": "Literal[value=/\\b\\d+ms\\b/]",
+            "message": "Literal millisecond values are not allowed in POC code. Use design tokens (motion.*) instead."
+          },
+          {
+            "selector": "Literal[value=/decentralized|blob storage|aggregator|publisher|finalization|seal encrypt|AES-GCM|walrus/i]",
+            "message": "Banned UX copy string detected. Use uxCopy from apps/web/copy/ux-copy.ts instead."
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["@poc/apps/*", "@poc/apps/web", "@poc/apps/api"],
+                "message": "Packages must not import from apps/. Move shared code to packages/shared instead. (R14.2–R14.5)"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["apps/web/components/forms/**", "apps/web/components/walrus/**", "apps/web/components/submissions/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["**/components/walrus/**", "**/components/submissions/**"],
+                "message": "forms/ components must not import from walrus/ or submissions/ (R19.12 — no peer imports between POC component folders)."
+              },
+              {
+                "group": ["**/components/forms/**", "**/components/submissions/**"],
+                "message": "walrus/ components must not import from forms/ or submissions/ (R19.12 — no peer imports between POC component folders)."
+              },
+              {
+                "group": ["**/components/forms/**", "**/components/walrus/**"],
+                "message": "submissions/ components must not import from forms/ or walrus/ (R19.12 — no peer imports between POC component folders)."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
 }
