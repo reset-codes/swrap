@@ -1,0 +1,164 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* SEALBASE Design Token CSS Variables */
+
+    /* Background & Surface */
+    --background: 0 0% 98%; /* #FAFAFA */
+    --surface: 0 0% 100%; /* #FFFFFF */
+    --foreground: 220 9% 11%; /* #111827 */
+
+    /* Card */
+    --card: 0 0% 100%;
+    --card-foreground: 220 9% 11%;
+
+    /* Popover */
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 9% 11%;
+
+    /* Primary (Accent) */
+    --primary: 221 83% 53%; /* #2563EB */
+    --primary-foreground: 0 0% 100%;
+
+    /* Secondary (Muted) */
+    --secondary: 220 14% 96%; /* #F3F4F6 */
+    --secondary-foreground: 220 9% 11%;
+
+    /* Muted */
+    --muted: 220 14% 96%; /* #F3F4F6 */
+    --muted-foreground: 220 9% 46%; /* #6B7280 */
+
+    /* Accent */
+    --accent: 220 14% 96%;
+    --accent-foreground: 220 9% 11%;
+
+    /* Destructive */
+    --destructive: 0 72% 51%; /* #DC2626 */
+    --destructive-foreground: 0 0% 100%;
+
+    /* Border & Input */
+    --border: 220 13% 91%; /* #E5E7EB */
+    --input: 220 13% 91%;
+    --ring: 221 83% 53%; /* #2563EB */
+
+    /* Border radius */
+    --radius: 0.5rem;
+
+    /* SEALBASE Brand Colors */
+    --walrus-brand: 199 89% 48%; /* #0EA5E9 */
+    --seal-brand: 263 70% 50%; /* #7C3AED */
+
+    /* Status Colors */
+    --success: 142 71% 45%; /* #16A34A */
+    --warning: 38 92% 50%; /* #D97706 */
+    --error: 0 72% 51%; /* #DC2626 */
+  }
+
+  .dark {
+    --background: 222 47% 11%;
+    --surface: 222 47% 14%;
+    --foreground: 210 40% 98%;
+
+    --card: 222 47% 14%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 47% 14%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 221 83% 53%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 217 33% 17%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217 33% 17%;
+    --input: 217 33% 17%;
+    --ring: 221 83% 53%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-text-primary;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-feature-settings: 'rlig' 1, 'calt' 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Monospace elements */
+  code,
+  kbd,
+  samp,
+  pre {
+    font-family: var(--font-jetbrains-mono), Menlo, Monaco, Consolas, monospace;
+  }
+
+  /* Focus ring styles */
+  :focus-visible {
+    @apply outline-none ring-2 ring-accent ring-offset-2;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-muted;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-border;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-text-muted;
+  }
+}
+
+@layer utilities {
+  /* Skeleton shimmer animation */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted)) 25%,
+      hsl(var(--secondary)) 50%,
+      hsl(var(--muted)) 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s linear infinite;
+  }
+
+  /* Blob ID monospace display */
+  .blob-id {
+    @apply font-mono text-xs text-text-secondary;
+  }
+
+  /* Walrus brand indicator */
+  .walrus-indicator {
+    @apply text-walrus-brand;
+  }
+
+  /* Seal brand indicator */
+  .seal-indicator {
+    @apply text-seal-brand;
+  }
+}

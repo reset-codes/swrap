@@ -1,0 +1,165 @@
+// ─── SEALBASE — Prisma Schema ─────────────────────────────────────────────────
+//
+// PostgreSQL is the INDEX LAYER ONLY. It is non-authoritative and reconstructable.
+// All meaningful data lives on Walrus. This schema stores only references and metadata.
+//
+// Key invariants (see ENGINEERING_RULES.md):
+//   - Every Submission row MUST have a walrusBlobId before it is considered persisted.
+//   - Every Form row MUST have a schemaBlobId before the form is considered published.
+//   - Slugs are unique and immutable after publication.
+//   - Submission rows are never updated — status changes are append-only log entries.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  owner
+  admin
+  viewer
+}
+
+enum FormMode {
+  conversational
+  table
+}
+
+enum EncryptionMode {
+  none
+  field_level
+  full_submission
+}
+
+enum SubmissionStatus {
+  open
+  under_review
+  planned
+  resolved
+  rejected
+}
+
+enum BlobType {
+  form_schema
+  submission
+  file_upload
+  encrypted_field
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  image     String?
+  role      UserRole @default(admin)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  forms              Form[]
+  submissionStatuses SubmissionStatusLog[]
+  creditTransactions CreditTransaction[]
+  storageCredit      StorageCredit?
+
+  @@map("users")
+}
+
+model Form {
+  id             String         @id @default(cuid())
+  slug           String         @unique
+  title          String
+  description    String?
+  ownerId        String
+  schemaBlobId   String?        // Walrus blob ID for the form schema — null until published
+  mode           FormMode       @default(table)
+  encryptionMode EncryptionMode @default(none)
+  sealPolicyId   String?        // Seal policy ID for encrypted forms
+  isPublished    Boolean        @default(false)
+  publishedAt    DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  owner       User            @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  submissions Submission[]
+  blobRefs    BlobReference[]
+
+  @@map("forms")
+}
+
+model Submission {
+  id           String           @id @default(cuid())
+  formId       String
+  walrusBlobId String           @unique // Canonical identifier — must always be set
+  status       SubmissionStatus @default(open)
+  submittedAt  DateTime         @default(now())
+
+  form       Form                  @relation(fields: [formId], references: [id], onDelete: Cascade)
+  statusLogs SubmissionStatusLog[]
+  blobRefs   BlobReference[]
+
+  @@map("submissions")
+}
+
+model SubmissionStatusLog {
+  id           String           @id @default(cuid())
+  submissionId String
+  adminId      String
+  status       SubmissionStatus
+  note         String?
+  createdAt    DateTime         @default(now())
+
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  admin      User       @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@map("submission_status_logs")
+}
+
+model BlobReference {
+  id           String   @id @default(cuid())
+  walrusBlobId String   @unique
+  blobType     BlobType
+  sizeBytes    Int?
+  formId       String?
+  submissionId String?
+  createdAt    DateTime @default(now())
+
+  form       Form?       @relation(fields: [formId], references: [id], onDelete: SetNull)
+  submission Submission? @relation(fields: [submissionId], references: [id], onDelete: SetNull)
+
+  @@map("blob_references")
+}
+
+model StorageCredit {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  balance   Float    @default(0)
+  updatedAt DateTime @updatedAt
+
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions CreditTransaction[]
+
+  @@map("storage_credits")
+}
+
+model CreditTransaction {
+  id           String   @id @default(cuid())
+  userId       String
+  creditId     String
+  amount       Float    // positive = deposit, negative = deduction
+  type         String   // 'deposit' | 'deduction'
+  walrusBlobId String?  // blob that triggered the deduction (if applicable)
+  description  String?
+  createdAt    DateTime @default(now())
+
+  user   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credit StorageCredit @relation(fields: [creditId], references: [id], onDelete: Cascade)
+
+  @@map("credit_transactions")
+}

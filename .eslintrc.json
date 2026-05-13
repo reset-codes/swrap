@@ -1,0 +1,16 @@
+{
+  "extends": ["next/core-web-vitals", "next/typescript"],
+  "rules": {
+    // Enforce no unused variables
+    "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
+    // Require explicit return types on functions (relaxed for React components)
+    "@typescript-eslint/explicit-function-return-type": "off",
+    // Disallow any types without justification
+    "@typescript-eslint/no-explicit-any": "warn",
+    // Enforce consistent imports
+    "import/no-duplicates": "error",
+    // React rules
+    "react/prop-types": "off",
+    "react/react-in-jsx-scope": "off"
+  }
+}
