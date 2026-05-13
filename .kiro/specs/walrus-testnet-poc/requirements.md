@@ -46,6 +46,10 @@ The POC is scoped as a branch (`walrus-poc`) off a tagged baseline (`v0-baseline
 - **Pretty_Printer**: A function that deterministically serializes a Form_Schema (or Submission) to a canonical JSON byte string, used for hashing, encrypting, and round-trip testing.
 - **Parser**: A function that reads a JSON byte string and returns a validated Form_Schema (or Submission) object, or a descriptive error.
 - **Validator**: The component that checks POC inputs (form schemas, submissions, env flags) against their expected shapes before use.
+- **Design_Tokens**: A centralized, typed module (`packages/shared/design-tokens.ts`) that exports the single source of truth for spacing, radius, typography, semantic color, elevation, and animation timing values used across the UI.
+- **UI_Primitives**: The reusable, variant-based component set (`Button`, `Input`, `Textarea`, `Card`, `Modal`, `Dropdown`, `Badge`, `Tabs`, `Toast`, `EmptyState`, `LoadingState`, `FormField`) built with a `shadcn/ui`-style architecture and consumed by all feature surfaces.
+- **UX_State**: One of the five canonical interaction states — `idle`, `loading`, `success`, `error`, `empty` — that every asynchronous POC action (upload, encryption, submission, retrieval, anchoring) must render explicitly.
+- **Design_System_Doc**: The document at `docs/design-system.md` that defines the visual philosophy, spacing system, component rules, interaction philosophy, animation constraints, and accessibility requirements for the POC UI.
 
 ---
 
@@ -284,7 +288,8 @@ The POC is scoped as a branch (`walrus-poc`) off a tagged baseline (`v0-baseline
 3. THE POC_System SHALL include a document at `docs/security.md` describing the temporary trust assumptions of the POC, the risks of the Local_Signer model, and the future migration path to production-grade signer infrastructure.
 4. THE POC_System SHALL include a document at `docs/walrus-flow.md` describing the upload, retrieval, and decryption flow for both Form_Schemas and Submissions, including sequence diagrams or step lists.
 5. THE POC_System SHALL include a document at `docs/roadmap.md` describing Stage 1 (POC: local signer, testnet, encrypted forms, encrypted submissions), Stage 2 (Beta: hosted backend, auth, rate limiting, storage accounting), and Stage 3 (Production: KMS/HSM, monitoring, tenant isolation, scalable queues, hardened infrastructure).
-6. WHEN any document above is missing from the repository at POC completion time, THE POC_System SHALL fail its completion check.
+6. THE POC_System SHALL include a document at `docs/design-system.md` describing the visual philosophy, spacing system, component rules, interaction philosophy, animation constraints, and accessibility requirements (see Requirement 19).
+7. WHEN any document above is missing from the repository at POC completion time, THE POC_System SHALL fail its completion check.
 
 ---
 
@@ -336,3 +341,28 @@ The POC is scoped as a branch (`walrus-poc`) off a tagged baseline (`v0-baseline
 7. THE POC_System SHALL NOT store application logic, execution scripts, or server-side behavior on Walrus; Walrus is used only as opaque blob storage.
 8. THE POC_System SHALL NOT store full Form_Schema or Submission payloads on Sui; Sui stores only Metadata_Records containing Blob_IDs, Schema_Hashes, timestamps, and ownership references.
 9. WHEN a feature from the `sealbase-platform` production spec is absent in the POC, THE POC_System SHALL NOT treat that absence as a defect; production features are deferred to Stage 2 and Stage 3 of the roadmap.
+
+---
+
+### Requirement 19: Design System and UI Consistency
+
+**User Story:** As a developer using the POC, I want the UI to feel minimal, technical, calm, and trustworthy — in the style of Linear, Vercel, Notion, Raycast, Stripe Docs, and Supabase — so that SealBase reads as serious infrastructure software for encrypted forms rather than a generic crypto dashboard or admin template.
+
+#### Acceptance Criteria
+
+1. THE POC_System SHALL define a centralized Design_Tokens module at `packages/shared/design-tokens.ts` exporting typed tokens for: spacing scale, border radius scale, typography scale, semantic colors, elevation/shadow levels, and animation timings.
+2. THE POC_System SHALL import all spacing, radius, typography, color, shadow, and animation-timing values used by any UI surface from the Design_Tokens module; ad-hoc numeric or color literals in component source SHALL be limited to values that do not appear in the Design_Tokens module and SHALL be justified in code comments.
+3. THE POC_System SHALL use exactly one of `Inter` or `Geist` as the sole UI typeface and SHALL NOT introduce marketing-sized display fonts, decorative fonts, or additional font families in the POC UI.
+4. THE POC_System SHALL restrict the color system to a neutral/slate base with at most one subtle blue accent, and SHALL NOT apply rainbow gradients, neon-saturated purples or cyans, or token-chart-style color palettes on any POC surface.
+5. THE POC_System SHALL implement the UI_Primitives set (`Button`, `Input`, `Textarea`, `Card`, `Modal`, `Dropdown`, `Badge`, `Tabs`, `Toast`, `EmptyState`, `LoadingState`, `FormField`) using a `shadcn/ui`-style, variant-based, composable architecture with a single API per primitive.
+6. THE POC_System SHALL require all Form_Builder_UI, Form_Submission_UI, Walrus, and submission surfaces to consume the UI_Primitives; duplicated button logic, one-off giant components, and inline styling SHALL be rejected in code review.
+7. FOR EVERY asynchronous POC action covering uploads, encryption, submissions, retrieval, and Sui anchoring, THE POC_System SHALL render an explicit visual representation of each UX_State (`idle`, `loading`, `success`, `error`, `empty`) and SHALL NOT leave the user on a blank screen during a pending operation.
+8. WHEN a Walrus operation (upload, retrieval, or anchoring) is in flight, THE POC_System SHALL surface progress using encryption-agnostic language (for example, "Securing your form…", "Uploading securely…") and SHALL NOT expose raw terms such as "decentralized blob storage finalization" or internal SDK jargon in user-visible copy.
+9. THE POC_System SHALL restrict the Form_Builder_UI V1 field-type palette to exactly `text`, `textarea`, `email`, `number`, `select`, `checkbox` and SHALL NOT introduce drag-heavy builders, workflow engines, conditional logic, or automation systems in the POC.
+10. THE POC_System SHALL structure the dashboard information hierarchy, in order of visual prominence, as: Form Name, Submission Count, Encryption Status, Upload Status, Blob Reference, Last Activity; analytics widgets, charts, and marketing content SHALL NOT appear on POC dashboard surfaces.
+11. THE POC_System SHALL limit UI animations to opacity fades and small transforms with durations and easings defined in the Design_Tokens module; bouncing, overshoot, parallax, confetti, and crypto-flashy transitions SHALL NOT be used on POC surfaces.
+12. THE POC_System SHALL organize UI component source into the folders `components/ui`, `components/forms`, `components/layout`, `components/walrus`, and `components/submissions`, with no mixed-concern or catch-all component folders.
+13. THE POC_System SHALL render the Form_Builder_UI and Form_Submission_UI legibly and operably at viewport widths from 360 CSS pixels up to 1920 CSS pixels, with primary optimization for developer-laptop widths between 1280 and 1536 CSS pixels.
+14. THE POC_System SHALL include a Design_System_Doc at `docs/design-system.md` defining: visual philosophy, spacing system, component rules, interaction philosophy, animation constraints, and accessibility requirements; each section SHALL be a dedicated markdown heading and SHALL be non-empty.
+15. THE POC_System SHALL meet WCAG 2.1 AA contrast ratios for all text and interactive elements on POC surfaces, and all UI_Primitives SHALL be fully operable via keyboard with visible focus indicators drawn from the Design_Tokens module.
+16. IF any POC UI surface is introduced that violates Requirements 19.2, 19.3, 19.4, 19.5, 19.6, 19.8, 19.9, 19.10, 19.11, or 19.12, THEN the Form_Builder_UI and Form_Submission_UI completion check SHALL fail until the violation is resolved.
