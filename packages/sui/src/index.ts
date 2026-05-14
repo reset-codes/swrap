@@ -1,2 +1,3 @@
-// @poc/sui package barrel. Populated in later phases.
-export {};
+// @poc/sui package barrel.
+export * from './signer-detector';
+export * from './sui-client';

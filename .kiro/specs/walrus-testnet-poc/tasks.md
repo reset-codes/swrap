@@ -18,7 +18,7 @@ This plan implements the Walrus Testnet POC on branch `walrus-poc` (forked from 
 
 ## Tasks
 
-- [ ] 1. Phase 0 — Baseline + monorepo scaffolding
+- [x] 1. Phase 0 — Baseline + monorepo scaffolding
   - [x] 1.1 Confirm baseline and branch prerequisites
     - Verify `git rev-parse v0-baseline` resolves and `git merge-base --is-ancestor v0-baseline HEAD` exits 0 on the current `walrus-poc` branch.
     - Add `scripts/check-baseline.sh` that runs both checks and fails fast with a descriptive error if either is missing.
@@ -73,26 +73,26 @@ This plan implements the Walrus Testnet POC on branch `walrus-poc` (forked from 
     - `chmod +x`; verify it runs green on the current empty scaffolding.
     - _Requirements: R16.2, R16.3, R16.4, R16.5, R16.6, R14.6, R14.8_
 
-  - [-] 1.9 Phase 0 checkpoint and commit
+  - [x] 1.9 Phase 0 checkpoint and commit
     - Run `scripts/phase-verify.sh` — expect green.
     - Commit on `walrus-poc` with message `feat: scaffold walrus-poc monorepo and design tokens`.
     - Ensure all tests pass, ask the user if questions arise.
     - _Requirements: R1.4, R16.1, R16.2, R16.5_
 
 - [ ] 2. Phase 1 — Wallet + testnet connectivity
-  - [ ] 2.1 Implement `packages/shared/src/env.ts` Env_Loader
+  - [x] 2.1 Implement `packages/shared/src/env.ts` Env_Loader
     - Export `PocEnvSchema`, `PocEnv` type, `EnvLoadError`, `loadPocEnv`, `_resetPocEnvForTesting` per design.md.
     - Parse the five POC flags with `StrictBool` (reject anything other than case-insensitive `"true"`/`"false"`).
     - Emit the redacted one-line JSON summary exactly once on first successful load.
     - Enforce the `NODE_ENV=production && !POC_ALLOW_PROD` safety fuse.
     - _Requirements: R2.1, R2.2, R2.9_
 
-  - [ ] 2.2 Env_Loader unit + property tests
+  - [x] 2.2 Env_Loader unit + property tests
     - Unit tests: valid env loads, each missing flag produces `EnvLoadError` naming that flag, case-insensitive `"TRUE"` accepted, `"1"`/`"yes"` rejected, cache returns the same instance.
     - `*.pbt.test.ts` using fast-check: **Property: parse(serialize(env)) == env for all valid boolean combinations** (generate all 2⁵ = 32 flag combinations + arbitrary valid URLs; assert `loadPocEnv(serialized).flags` matches input after cache reset). Not an R17 invariant — this is unit hardening only.
     - _Requirements: R2.1, R2.9_
 
-  - [ ] 2.3 Implement `packages/sui/src/signer-detector.ts`
+  - [x] 2.3 Implement `packages/sui/src/signer-detector.ts`
     - `detectLocalSigner()` reads `~/.sui/sui_config/client.yaml`, resolves `active_address` + `active_env`, reads `~/.sui/sui_config/sui.keystore`, iterates entries, and returns the first keypair whose `.toSuiAddress()` matches.
     - Support `Ed25519Keypair`, `Secp256k1Keypair`, `Secp256r1Keypair`.
     - Wrap in `PocSigner` closure exposing only `scheme`, `address`, `getPublicKey`, `signPersonalMessage`, `signTransaction`, `deriveSymmetricKey(salt, info)`.
@@ -100,18 +100,18 @@ This plan implements the Walrus Testnet POC on branch `walrus-poc` (forked from 
     - Install runtime deps: `@mysten/sui`, `js-yaml` (already added in 1.4).
     - _Requirements: R3.1, R3.2, R3.3, R3.5, R3.6, R3.7_
 
-  - [ ] 2.4 Signer_Detector "no-secret-leak" invariant test
+  - [x] 2.4 Signer_Detector "no-secret-leak" invariant test
     - Unit tests: each error code is surfaced for the correct filesystem fault; address matching across all three schemes uses fixtures.
     - `*.pbt.test.ts`: **R17 supporting invariant — PocSigner never serializes secret bytes.** fast-check generates random `PocSigner` constructions; assert `JSON.stringify(signer)`, `String(signer)`, `util.inspect(signer)`, and enumeration of `Object.keys(signer)` never contain any byte of the source secret.
     - _Requirements: R3.7, R17.7 (plaintext-leak precondition)_
 
-  - [ ] 2.5 Implement `packages/sui/src/sui-client.ts`
+  - [x] 2.5 Implement `packages/sui/src/sui-client.ts`
     - Export `createSuiClient`, `getBalance(client, address)`, `signAndExecuteTestMessage(signer)` (sign + verify a static "sealbase-poc-handshake" payload), `executeTransaction(client, tx, signer)`, `queryMetadataRecords(client, packageId, owner)` (stub returning `[]` until Phase 6 lands the Move module).
     - All functions accept an `AbortSignal` wired to a 10-second default timeout.
     - Raise `SuiClientError` with the four codes from design.md.
     - _Requirements: R4.1, R4.2, R4.4, R4.5, R4.6_
 
-  - [ ] 2.6 Implement `packages/walrus/src/client.ts` + health check
+  - [x] 2.6 Implement `packages/walrus/src/client.ts` + health check
     - `createWalrusClient(config)` returns the `WalrusClient` interface from design.md (`put`, `get`, `healthCheck`).
     - `put` issues `PUT ${publisherUrl}/v1/blobs?epochs=${epochs}` with `application/octet-stream`; parses the `newlyCreated` / `alreadyCertified` response shapes.
     - `get` issues `GET ${aggregatorUrl}/v1/blobs/${blobId}`.
@@ -120,7 +120,7 @@ This plan implements the Walrus Testnet POC on branch `walrus-poc` (forked from 
     - Raise `WalrusError` with all nine codes from design.md.
     - _Requirements: R5.1, R5.2, R5.3, R5.4, R5.5, R5.6_
 
-  - [ ] 2.7 Walrus_Client unit tests with MSW fixtures
+  - [x] 2.7 Walrus_Client unit tests with MSW fixtures
     - Happy-path: publisher returns `newlyCreated` → `put` returns `{ blobId, isNew: true, endpoint }`.
     - 5xx retry exhaustion → `PUBLISHER_UNREACHABLE`.
     - Aggregator 404 → `AGGREGATOR_NOT_FOUND` (no retry).
@@ -128,23 +128,23 @@ This plan implements the Walrus Testnet POC on branch `walrus-poc` (forked from 
     - `signer_status = 'ready'` iff signer detected AND both health probes green.
     - _Requirements: R5.2, R5.3, R5.4, R5.5, R5.6_
 
-  - [ ] 2.8 Implement `apps/api/health.ts` and the `/api/poc/health` thin wrapper
+  - [x] 2.8 Implement `apps/api/health.ts` and the `/api/poc/health` thin wrapper
     - `apps/api/health.ts` exports `GET` that: loads env, runs Signer_Detector, runs Walrus health, queries Sui balance; returns JSON `{ ok, env_flags, signer: { address, network } | null, walrus: { publisher, aggregator, signer_status }, sui: { balance, rpc }, seal: { mode: 'fallback' | 'real' } }`.
     - `src/app/api/poc/health/route.ts` is a single-line re-export: `export { GET } from '@poc/apps/api/health'; export const runtime = 'nodejs'; export const dynamic = 'force-dynamic';`.
     - Add `src/middleware.ts` exemption: paths matching `^/api/poc/` and `^/poc/` bypass NextAuth middleware when `DEV_BYPASS_STORAGE=true`.
     - _Requirements: R2.3, R4.3, R5.3, R14.7_
 
-  - [ ] 2.9 Error-envelope helper and API contract
+  - [x] 2.9 Error-envelope helper and API contract
     - `apps/api/error-envelope.ts`: `toErrorResponse(err: unknown): NextResponse` produces `{ error: { code, stage, message, details? } }` with correct HTTP status; handles `EnvLoadError`, `SignerDetectorError`, `SuiClientError`, `WalrusError`.
     - Use it in `apps/api/health.ts`.
     - Unit test coverage for each error class → correct HTTP status + envelope shape.
     - _Requirements: R2.9, R3.5, R3.6, R4.5, R5.4_
 
-  - [ ] 2.10 Update `.env.example` and document the five POC flags
+  - [x] 2.10 Update `.env.example` and document the five POC flags
     - Append POC section with default values: `DEV_BYPASS_STORAGE=true`, `DEV_LOCAL_SIGNER=true`, `DEV_ALLOW_PLAINTEXT=false`, `USE_WALRUS_TESTNET=true`, `USE_SUI_TESTNET=true`, plus `WALRUS_PUBLISHER_URL`, `WALRUS_AGGREGATOR_URL`, `SUI_RPC_URL`, `SUI_POC_PACKAGE_ID` (empty until Phase 6).
     - _Requirements: R2.1, R2.7, R2.8_
 
-  - [ ] 2.11 Phase 1 checkpoint and commit
+  - [-] 2.11 Phase 1 checkpoint and commit
     - Run `scripts/phase-verify.sh` with `--probe /api/poc/health` expecting HTTP < 500.
     - Commit: `feat: add walrus testnet connectivity`.
     - Ensure all tests pass, ask the user if questions arise.
