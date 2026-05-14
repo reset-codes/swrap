@@ -79,7 +79,7 @@ This plan implements the Walrus Testnet POC on branch `walrus-poc` (forked from 
     - Ensure all tests pass, ask the user if questions arise.
     - _Requirements: R1.4, R16.1, R16.2, R16.5_
 
-- [ ] 2. Phase 1 — Wallet + testnet connectivity
+- [x] 2. Phase 1 — Wallet + testnet connectivity
   - [x] 2.1 Implement `packages/shared/src/env.ts` Env_Loader
     - Export `PocEnvSchema`, `PocEnv` type, `EnvLoadError`, `loadPocEnv`, `_resetPocEnvForTesting` per design.md.
     - Parse the five POC flags with `StrictBool` (reject anything other than case-insensitive `"true"`/`"false"`).
@@ -144,31 +144,31 @@ This plan implements the Walrus Testnet POC on branch `walrus-poc` (forked from 
     - Append POC section with default values: `DEV_BYPASS_STORAGE=true`, `DEV_LOCAL_SIGNER=true`, `DEV_ALLOW_PLAINTEXT=false`, `USE_WALRUS_TESTNET=true`, `USE_SUI_TESTNET=true`, plus `WALRUS_PUBLISHER_URL`, `WALRUS_AGGREGATOR_URL`, `SUI_RPC_URL`, `SUI_POC_PACKAGE_ID` (empty until Phase 6).
     - _Requirements: R2.1, R2.7, R2.8_
 
-  - [-] 2.11 Phase 1 checkpoint and commit
+  - [x] 2.11 Phase 1 checkpoint and commit
     - Run `scripts/phase-verify.sh` with `--probe /api/poc/health` expecting HTTP < 500.
     - Commit: `feat: add walrus testnet connectivity`.
     - Ensure all tests pass, ask the user if questions arise.
     - _Requirements: R2.2, R4.3, R5.3, R16.1, R16.3_
 
 - [ ] 3. Phase 2 — Plaintext blob upload / retrieval round-trip
-  - [ ] 3.1 Implement `apps/api/forms.ts` plaintext upload path (gated)
+  - [x] 3.1 Implement `apps/api/forms.ts` plaintext upload path (gated)
     - `POST /api/poc/forms` with `{ form_schema, plaintext?: true }`: when `DEV_ALLOW_PLAINTEXT=true` and `plaintext === true`, serialize form_schema to canonical JSON bytes (placeholder pre-Phase-3: `JSON.stringify` with sorted keys; replaced by Pretty_Printer in Phase 3) and call `walrus.put(bytes)`; when flag is `false` or body omits `plaintext`, return HTTP 400 `{ error: { code: 'PLAINTEXT_DISABLED', stage: 'validate' } }`.
     - `GET /api/poc/forms/[blob_id]?raw=true`: call `walrus.get(blob_id)` and stream bytes back with `application/octet-stream`.
     - Thin re-exports at `src/app/api/poc/forms/route.ts` and `src/app/api/poc/forms/[blob_id]/route.ts`.
     - _Requirements: R6.1, R6.2, R6.3, R6.6, R6.7_
 
-  - [ ] 3.2 **PBT — R17.4 Walrus byte-identity round-trip** (property test for Walrus_Client)
+  - [x] 3.2 **PBT — R17.4 Walrus byte-identity round-trip** (property test for Walrus_Client)
     - **Property 4: retrieve(upload(b)) == b** — fast-check generates `uint8Array({ minLength: 1, maxLength: 65536 })`; assert `walrus.get(walrus.put(bytes).blobId) === bytes` bytewise.
     - Run twice: once against MSW with an in-memory publisher/aggregator pair (default); once guarded by `USE_WALRUS_TESTNET=true` env var (opt-in integration against real testnet, `numRuns: 5`, skip otherwise).
     - **Validates: Requirements R6.4, R6.5, R17.4**
     - _Requirements: R6.4, R6.5, R17.4_
 
-  - [ ] 3.3 Plaintext upload integration test
+  - [x] 3.3 Plaintext upload integration test
     - Unit test via Next.js route-handler harness: POST with `DEV_ALLOW_PLAINTEXT=true` returns a Blob_ID; POST with `DEV_ALLOW_PLAINTEXT=false` returns 400 and `code: 'PLAINTEXT_DISABLED'`.
     - Upload → GET round-trip returns byte-identical bytes (a single example, MSW-backed; the general property is 3.2).
     - _Requirements: R6.1, R6.4, R6.6_
 
-  - [ ] 3.4 Phase 2 checkpoint and commit
+  - [-] 3.4 Phase 2 checkpoint and commit
     - Run `scripts/phase-verify.sh --probe /api/poc/forms --method POST --body '{"form_schema":{"id":"x","title":"t","fields":[],"version":1,"created_at":"2024-01-01T00:00:00Z"},"plaintext":true}'`.
     - Commit: `feat: add plaintext walrus round-trip (DEV_ALLOW_PLAINTEXT)`.
     - Ensure all tests pass, ask the user if questions arise.
