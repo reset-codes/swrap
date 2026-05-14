@@ -238,7 +238,7 @@ This plan implements the Walrus Testnet POC on branch `walrus-poc` (forked from 
     - Ensure all tests pass, ask the user if questions arise.
     - _Requirements: R7.3, R8.1, R8.4, R16.1, R16.3_
 
-- [ ] 5. Phase 4 — Form creation UI + Local_Store (Form_Builder_UI)
+- [x] 5. Phase 4 — Form creation UI + Local_Store (Form_Builder_UI)
   - [x] 5.1 Implement `apps/web/stores/local-store.ts` (Zustand + persist)
     - Zustand store with persist middleware, key `sealbase-poc@1`, `partialize` excludes `scratch`.
     - State shape: `{ version: 1, forms: Record<blob_id, PersistedFormEntry>, submissions: Record<blob_id, PersistedSubmissionEntry>, scratch? }`.
@@ -319,26 +319,26 @@ This plan implements the Walrus Testnet POC on branch `walrus-poc` (forked from 
     - Add a grep check that no file under `apps/web/components/forms/**` imports from `@dnd-kit/*` or `react-beautiful-dnd`.
     - _Requirements: R19.3, R19.6, R19.9, R19.16_
 
-  - [-] 5.14 Phase 4 checkpoint and commit
+  - [x] 5.14 Phase 4 checkpoint and commit
     - Run `scripts/phase-verify.sh --probe /poc --probe /poc/forms/new --probe /api/poc/forms`.
     - Commit: `feat: add form builder UI and local persistence`.
     - Ensure all tests pass, ask the user if questions arise.
     - _Requirements: R10.3, R11.2, R19.16, R16.1, R16.3_
 
 - [ ] 6. Phase 5 — Form submission UI (Form_Submission_UI)
-  - [ ] 6.1 Implement `apps/api/submissions.ts`
+  - [x] 6.1 Implement `apps/api/submissions.ts`
     - `POST /api/poc/submissions` with `{ form_blob_id, answers }`: retrieve form blob, decrypt, validate `answers` against the `FormSchema` (via `validateSubmissionAgainstForm`), assemble a `Submission`, canonicalize → encrypt → `walrus.put`, return `{ blob_id, form_blob_id, schema_hash, submitted_at }`.
     - `GET /api/poc/submissions/[blob_id]`: owner-only decrypt of submission blob; returns parsed `Submission`.
     - Thin route wrappers `src/app/api/poc/submissions/route.ts` and `src/app/api/poc/submissions/[blob_id]/route.ts`.
     - _Requirements: R12.1, R12.2, R12.3, R12.5_
 
-  - [ ] 6.2 Implement submission UI components
+  - [x] 6.2 Implement submission UI components
     - `apps/web/components/submissions/SubmissionFillFields.tsx`: renders form fields from a decrypted `FormSchema`, emits `{ answers }`.
     - `apps/web/components/submissions/SubmissionListRow.tsx` and `SubmissionDetailPanel.tsx` for owner view.
     - `EncryptedSubmissionIndicator` — small badge shown on every submission card.
     - _Requirements: R12.1, R12.5, R19.6, R19.7_
 
-  - [ ] 6.3 Implement `apps/web/pages/FormFillPage.tsx` + wrapper
+  - [x] 6.3 Implement `apps/web/pages/FormFillPage.tsx` + wrapper
     - Page fetches form blob, decrypts, renders form, manages `SubmitState` (idle/validating/securing/uploading/success/error) — all five UX_States rendered explicitly.
     - Validation failure: field-level errors, no upload (R12.6).
     - On success: `upsertSubmission` in Local_Store linking `submission.blob_id → form.blob_id` with `submitted_at`.
@@ -346,22 +346,22 @@ This plan implements the Walrus Testnet POC on branch `walrus-poc` (forked from 
     - Thin wrapper at `src/app/poc/forms/[blob_id]/fill/page.tsx`.
     - _Requirements: R12.1, R12.2, R12.3, R12.4, R12.6, R19.7, R19.8_
 
-  - [ ] 6.4 Implement `apps/web/pages/SubmissionViewPage.tsx` + wrapper
+  - [x] 6.4 Implement `apps/web/pages/SubmissionViewPage.tsx` + wrapper
     - Owner-only view: fetch `GET /api/poc/submissions/[blob_id]`, decrypt, render values in a read-only `FormField` grid.
     - Handle retrieval / decryption errors with stage-labeled messages.
     - Thin wrapper at `src/app/poc/submissions/[blob_id]/page.tsx`.
     - _Requirements: R12.5, R19.7, R19.8_
 
-  - [ ] 6.5 Submission validation unit tests
+  - [x] 6.5 Submission validation unit tests
     - Cross-schema: unknown `field_id` → validation error naming the field; missing required field → error; `form_schema_hash` mismatch → error.
     - _Requirements: R12.2, R12.6_
 
-  - [ ] 6.6 End-to-end pipeline test for submissions
+  - [x] 6.6 End-to-end pipeline test for submissions
     - Integration test: create form via `POST /api/poc/forms`; submit via `POST /api/poc/submissions`; owner retrieves via `GET /api/poc/submissions/[blob_id]`; assert decrypted answers deep-equal submitted answers.
     - Non-owner signer attempting decrypt → `SealAuthError` (reuses R17.9 property framework).
     - _Requirements: R8.4, R12.1, R12.3, R12.5, R17.5, R17.9_
 
-  - [ ] 6.7 Phase 5 checkpoint and commit
+  - [-] 6.7 Phase 5 checkpoint and commit
     - Run `scripts/phase-verify.sh --probe /poc/forms/[sample_blob_id]/fill --probe /api/poc/submissions`.
     - Commit: `feat: add form submission encryption flow`.
     - Ensure all tests pass, ask the user if questions arise.
