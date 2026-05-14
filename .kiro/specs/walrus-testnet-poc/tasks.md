@@ -415,7 +415,7 @@ This plan implements the Walrus Testnet POC on branch `walrus-poc` (forked from 
     - Ensure all tests pass, ask the user if questions arise.
     - _Requirements: R13.1, R13.3, R16.1, R16.3_
 
-- [ ] 8. Phase 7 — Documentation deliverables + completion check
+- [x] 8. Phase 7 — Documentation deliverables + completion check
   - [x] 8.1 Write `docs/architecture.md`
     - Sections: system overview, trust assumptions, Local_Signer model, encryption lifecycle, Walrus upload lifecycle, Sui metadata lifecycle.
     - Include the component + deployment diagram from design.md.
@@ -447,7 +447,7 @@ This plan implements the Walrus Testnet POC on branch `walrus-poc` (forked from 
     - Add `npm run check:completion` script invoking it.
     - _Requirements: R15.7, R16.5, R19.14, R19.16_
 
-  - [-] 8.8 Final phase checkpoint and commit
+  - [x] 8.8 Final phase checkpoint and commit
     - Run `scripts/phase-verify.sh` and `npm run check:completion` — both must be green.
     - Commit: `feat: add poc documentation and completion check`.
     - Ensure all tests pass, ask the user if questions arise.

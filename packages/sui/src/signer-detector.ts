@@ -130,19 +130,33 @@ export async function detectLocalSigner(): Promise<SignerDetectorResult> {
     let scheme: string;
     let secretKey: Uint8Array;
     try {
+      // Try bech32 format first (suiprivkey1...) — used by newer Sui CLI versions
       const decoded = decodeSuiPrivateKey(entry);
       scheme = decoded.scheme;
       secretKey = decoded.secretKey;
     } catch {
-      // Malformed entry — skip and try next
-      continue;
+      // Fall back to legacy base64 format used by older Sui CLI versions.
+      // Format: base64(scheme_byte || 32_byte_secret)
+      // scheme_byte: 0x00 = Ed25519, 0x01 = Secp256k1, 0x02 = Secp256r1
+      try {
+        const raw = Buffer.from(entry, 'base64');
+        if (raw.length !== 33) continue; // not the expected legacy format
+        const schemeByte = raw[0];
+        secretKey = new Uint8Array(raw.slice(1, 33));
+        if (schemeByte === 0x00) scheme = 'ED25519';
+        else if (schemeByte === 0x01) scheme = 'Secp256k1';
+        else if (schemeByte === 0x02) scheme = 'Secp256r1';
+        else continue; // unknown scheme byte
+      } catch {
+        continue; // truly malformed — skip
+      }
     }
 
     try {
       const keypair = buildKeypair(scheme, secretKey);
       if (keypair.toSuiAddress() === activeAddress) {
         return {
-          signer: wrapKeypair(keypair, schemeToSignerScheme(scheme)),
+          signer: wrapKeypair(keypair, schemeToSignerScheme(scheme), secretKey),
           activeNetwork: activeEnv,
           clientYamlPath,
           keystorePath,
@@ -196,14 +210,17 @@ function schemeToSignerScheme(scheme: string): SignerScheme {
  *
  * The returned object is `Object.freeze()`d so no new properties can be added.
  */
-function wrapKeypair(kp: AnyKeypair, scheme: SignerScheme): PocSigner {
-  // Extract the raw 32-byte secret from the keypair.
-  // `getSecretKey()` returns a bech32-encoded string; decode it to get raw bytes.
-  const rawSecret: Uint8Array = decodeSuiPrivateKey(kp.getSecretKey()).secretKey;
-
-  // Defensive copy so the original keypair's internal buffer cannot be mutated
-  // from outside this closure.
-  const secret = new Uint8Array(rawSecret);
+function wrapKeypair(kp: AnyKeypair, scheme: SignerScheme, rawSecretBytes?: Uint8Array): PocSigner {
+  // Use the provided raw secret bytes if available (avoids calling getSecretKey()
+  // which may fail for keypairs built from the legacy base64 keystore format).
+  // Fall back to decoding from the keypair's bech32 secret key.
+  let secret: Uint8Array;
+  if (rawSecretBytes) {
+    secret = new Uint8Array(rawSecretBytes);
+  } else {
+    const rawSecret: Uint8Array = decodeSuiPrivateKey(kp.getSecretKey()).secretKey;
+    secret = new Uint8Array(rawSecret);
+  }
 
   return Object.freeze({
     scheme,

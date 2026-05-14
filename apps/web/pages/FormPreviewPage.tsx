@@ -18,9 +18,10 @@
  */
 
 import * as React from 'react';
+import { useRouter } from 'next/navigation';
 import type { FormSchema } from '@poc/shared';
 import { uxCopy } from '../copy/ux-copy';
-import { FormField, Input, Textarea, LoadingState } from '../components/ui';
+import { FormField, Input, Textarea, LoadingState, Button } from '../components/ui';
 import { ContentFrame } from '../components/layout/ContentFrame';
 import { PageHeader } from '../components/layout/PageHeader';
 import { AppShell } from '../components/layout/AppShell';
@@ -259,6 +260,7 @@ export interface FormPreviewPageProps {
 }
 
 export function FormPreviewPage({ blobId }: FormPreviewPageProps) {
+  const router = useRouter();
   const [fetchState, setFetchState] = React.useState<FetchState>({ status: 'idle' });
 
   // Fetch on mount
@@ -363,7 +365,18 @@ export function FormPreviewPage({ blobId }: FormPreviewPageProps) {
       <ContentFrame>
         <PageHeader
           title={formSchema.title}
-          actions={<BlobReferenceChip blobId={blobId} />}
+          actions={
+            <div className="flex items-center gap-4">
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => router.push(`/poc/forms/${blobId}/fill`)}
+              >
+                Fill out form
+              </Button>
+              <BlobReferenceChip blobId={blobId} />
+            </div>
+          }
         />
 
         <div className="mt-8 flex flex-col gap-6 max-w-2xl">
