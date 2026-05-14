@@ -2,39 +2,32 @@
  * Forms handler for the POC.
  *
  * POST /api/poc/forms
- *   - When DEV_ALLOW_PLAINTEXT=true and body.plaintext===true:
- *     serializes form_schema to canonical JSON bytes and uploads to Walrus.
- *   - Otherwise returns HTTP 400 PLAINTEXT_DISABLED.
+ *   - Default (no `plaintext: true`): encrypted path.
+ *     validate → canonicalize → schemaHashHex → Seal.encrypt → walrus.put
+ *     → return { blob_id, schema_hash, created_at, tx_digest: null }
+ *   - When DEV_ALLOW_PLAINTEXT=true and body.plaintext===true: plaintext path.
+ *     canonicalize → walrus.put → return { blob_id, created_at }
  *
- * GET /api/poc/forms/[blob_id]?raw=true
- *   - Retrieves blob bytes from Walrus.
- *   - If ?raw=true, streams as application/octet-stream.
- *   - Otherwise returns base64-encoded JSON.
+ * GET /api/poc/forms/[blob_id]
+ *   - Default (no `?raw=true`): encrypted path.
+ *     walrus.get → Seal.decrypt → parseFormSchema → return { form_schema, blob_id, schema_hash }
+ *   - When ?raw=true: return raw bytes as application/octet-stream.
  *
- * Requirements: R6.1, R6.2, R6.3, R6.6, R6.7
+ * Requirements: R6.1, R6.2, R6.3, R6.6, R6.7, R7.1, R7.2, R8.1, R8.2, R8.3, R8.6
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { loadPocEnv } from '@poc/shared';
+import {
+  loadPocEnv,
+  canonicalize,
+  schemaHashHex,
+  FormSchemaSchema,
+  parseFormSchema,
+} from '@poc/shared';
+import { encrypt, decrypt, looksLikeEncryptedBlob } from '@poc/seal';
+import { detectLocalSigner } from '@poc/sui';
 import { createWalrusClient } from '@poc/walrus';
 import { toErrorResponse } from './error-envelope';
-
-// ---------------------------------------------------------------------------
-// Canonical JSON serializer (placeholder pre-Phase-3)
-// Phase 3 will replace this with Pretty_Printer.canonicalize()
-// ---------------------------------------------------------------------------
-
-function canonicalizeJson(value: unknown): Uint8Array {
-  const sorted = JSON.stringify(value, (_, v) => {
-    if (v && typeof v === 'object' && !Array.isArray(v)) {
-      return Object.fromEntries(
-        Object.entries(v as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)),
-      );
-    }
-    return v;
-  });
-  return new TextEncoder().encode(sorted);
-}
 
 // ---------------------------------------------------------------------------
 // POST handler — upload form_schema to Walrus
@@ -60,40 +53,144 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  // 3. Gate: if DEV_ALLOW_PLAINTEXT is false OR body.plaintext is not true, reject
-  if (!env.DEV_ALLOW_PLAINTEXT || body.plaintext !== true) {
+  // 3. Plaintext path: only allowed when DEV_ALLOW_PLAINTEXT=true AND body.plaintext===true
+  if (body.plaintext === true) {
+    if (!env.DEV_ALLOW_PLAINTEXT) {
+      return NextResponse.json(
+        { error: { code: 'PLAINTEXT_DISABLED', stage: 'validate' } },
+        { status: 400 },
+      );
+    }
+
+    // Validate form_schema is present
+    if (body.form_schema === undefined || body.form_schema === null) {
+      return NextResponse.json(
+        { error: { code: 'MISSING_FORM_SCHEMA', stage: 'validate', message: 'form_schema is required' } },
+        { status: 400 },
+      );
+    }
+
+    // Serialize form_schema to canonical JSON bytes
+    let bytes: Uint8Array;
+    try {
+      bytes = canonicalize(body.form_schema);
+    } catch (err) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'SERIALIZE_FAILED',
+            stage: 'serialize',
+            message: err instanceof Error ? err.message : 'Failed to serialize form_schema',
+          },
+        },
+        { status: 500 },
+      );
+    }
+
+    const walrus = createWalrusClient({
+      publisherUrl: env.WALRUS_PUBLISHER_URL,
+      aggregatorUrl: env.WALRUS_AGGREGATOR_URL,
+    });
+
+    let putResult: Awaited<ReturnType<typeof walrus.put>>;
+    try {
+      putResult = await walrus.put(bytes);
+    } catch (err) {
+      return toErrorResponse(err);
+    }
+
     return NextResponse.json(
-      { error: { code: 'PLAINTEXT_DISABLED', stage: 'validate' } },
+      {
+        blob_id: putResult.blobId,
+        created_at: new Date().toISOString(),
+      },
+      { status: 200 },
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Encrypted path (default — body.plaintext !== true)
+  // ---------------------------------------------------------------------------
+
+  // 4. Validate form_schema against FormSchemaSchema
+  const parseResult = FormSchemaSchema.safeParse(body.form_schema);
+  if (!parseResult.success) {
+    const issues = parseResult.error.issues.map(
+      (issue) => `${issue.path.join('.')}: ${issue.message}`,
+    );
+    return NextResponse.json(
+      {
+        error: {
+          code: 'INVALID_FORM_SCHEMA',
+          stage: 'validate',
+          message: 'form_schema failed validation',
+          details: { issues },
+        },
+      },
       { status: 400 },
     );
   }
 
-  // 4. Validate form_schema is present
-  if (body.form_schema === undefined || body.form_schema === null) {
-    return NextResponse.json(
-      { error: { code: 'MISSING_FORM_SCHEMA', stage: 'validate', message: 'form_schema is required' } },
-      { status: 400 },
-    );
-  }
-
-  // 5. Serialize form_schema to canonical JSON bytes
-  let bytes: Uint8Array;
+  // 5. Canonicalize the validated form_schema
+  let plainBytes: Uint8Array;
   try {
-    bytes = canonicalizeJson(body.form_schema);
+    plainBytes = canonicalize(parseResult.data);
   } catch (err) {
     return NextResponse.json(
       {
         error: {
           code: 'SERIALIZE_FAILED',
           stage: 'serialize',
-          message: err instanceof Error ? err.message : 'Failed to serialize form_schema',
+          message: err instanceof Error ? err.message : 'Failed to canonicalize form_schema',
         },
       },
       { status: 500 },
     );
   }
 
-  // 6. Create walrus client and upload
+  // 6. Compute schema_hash from canonical bytes
+  const schema_hash = schemaHashHex(parseResult.data);
+
+  // 7. Detect local signer
+  let signerResult: Awaited<ReturnType<typeof detectLocalSigner>>;
+  try {
+    signerResult = await detectLocalSigner();
+  } catch (err) {
+    return toErrorResponse(err);
+  }
+
+  // 8. Encrypt the canonical bytes
+  let encryptedBytes: Uint8Array;
+  try {
+    encryptedBytes = await encrypt(plainBytes, signerResult.signer, 'form');
+  } catch (err) {
+    return NextResponse.json(
+      {
+        error: {
+          code: 'ENCRYPT_FAILED',
+          stage: 'encrypt',
+          message: err instanceof Error ? err.message : 'Encryption failed',
+        },
+      },
+      { status: 500 },
+    );
+  }
+
+  // 9. R8.6: When DEV_ALLOW_PLAINTEXT=false, verify the encrypted output looks like an Encrypted_Blob
+  if (!env.DEV_ALLOW_PLAINTEXT && !looksLikeEncryptedBlob(encryptedBytes)) {
+    return NextResponse.json(
+      {
+        error: {
+          code: 'NOT_ENCRYPTED_BLOB',
+          stage: 'validate',
+          message: 'Upload rejected: output does not look like an Encrypted_Blob (DEV_ALLOW_PLAINTEXT=false)',
+        },
+      },
+      { status: 400 },
+    );
+  }
+
+  // 10. Upload to Walrus
   const walrus = createWalrusClient({
     publisherUrl: env.WALRUS_PUBLISHER_URL,
     aggregatorUrl: env.WALRUS_AGGREGATOR_URL,
@@ -101,16 +198,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   let putResult: Awaited<ReturnType<typeof walrus.put>>;
   try {
-    putResult = await walrus.put(bytes);
+    putResult = await walrus.put(encryptedBytes);
   } catch (err) {
     return toErrorResponse(err);
   }
 
-  // 7. Return blob_id and created_at
+  // 11. Return blob_id, schema_hash, created_at, tx_digest (null — Sui anchoring deferred to Phase 6)
   return NextResponse.json(
     {
       blob_id: putResult.blobId,
+      schema_hash,
       created_at: new Date().toISOString(),
+      tx_digest: null,
     },
     { status: 200 },
   );
@@ -155,7 +254,7 @@ export async function GET(
     return toErrorResponse(err);
   }
 
-  // 4. If ?raw=true, return bytes as application/octet-stream
+  // 4. If ?raw=true, return bytes as application/octet-stream (raw path)
   const raw = request.nextUrl.searchParams.get('raw');
   if (raw === 'true') {
     return new NextResponse(Buffer.from(bytes), {
@@ -164,7 +263,62 @@ export async function GET(
     });
   }
 
-  // 5. Otherwise return base64-encoded JSON
-  const base64 = Buffer.from(bytes).toString('base64');
-  return NextResponse.json({ blob_id, data: base64 }, { status: 200 });
+  // ---------------------------------------------------------------------------
+  // Encrypted path (default — no ?raw=true)
+  // ---------------------------------------------------------------------------
+
+  // 5. Detect local signer
+  let signerResult: Awaited<ReturnType<typeof detectLocalSigner>>;
+  try {
+    signerResult = await detectLocalSigner();
+  } catch (err) {
+    return toErrorResponse(err);
+  }
+
+  // 6. Decrypt the blob bytes
+  let decryptedBytes: Uint8Array;
+  try {
+    decryptedBytes = await decrypt(bytes, signerResult.signer);
+  } catch (err) {
+    return NextResponse.json(
+      {
+        error: {
+          code: 'DECRYPT_FAILED',
+          stage: 'decrypt',
+          message: err instanceof Error ? err.message : 'Decryption failed',
+        },
+      },
+      { status: 422 },
+    );
+  }
+
+  // 7. Parse the decrypted bytes as a FormSchema
+  let formSchema: ReturnType<typeof parseFormSchema>;
+  try {
+    formSchema = parseFormSchema(decryptedBytes);
+  } catch (err) {
+    return NextResponse.json(
+      {
+        error: {
+          code: 'PARSE_FAILED',
+          stage: 'parse',
+          message: err instanceof Error ? err.message : 'Failed to parse form schema',
+        },
+      },
+      { status: 422 },
+    );
+  }
+
+  // 8. Compute schema_hash from the decrypted bytes
+  const schema_hash = schemaHashHex(formSchema);
+
+  // 9. Return form_schema, blob_id, schema_hash
+  return NextResponse.json(
+    {
+      form_schema: formSchema,
+      blob_id,
+      schema_hash,
+    },
+    { status: 200 },
+  );
 }

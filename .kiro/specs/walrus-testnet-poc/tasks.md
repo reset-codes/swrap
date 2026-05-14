@@ -150,7 +150,7 @@ This plan implements the Walrus Testnet POC on branch `walrus-poc` (forked from 
     - Ensure all tests pass, ask the user if questions arise.
     - _Requirements: R2.2, R4.3, R5.3, R16.1, R16.3_
 
-- [ ] 3. Phase 2 — Plaintext blob upload / retrieval round-trip
+- [x] 3. Phase 2 — Plaintext blob upload / retrieval round-trip
   - [x] 3.1 Implement `apps/api/forms.ts` plaintext upload path (gated)
     - `POST /api/poc/forms` with `{ form_schema, plaintext?: true }`: when `DEV_ALLOW_PLAINTEXT=true` and `plaintext === true`, serialize form_schema to canonical JSON bytes (placeholder pre-Phase-3: `JSON.stringify` with sorted keys; replaced by Pretty_Printer in Phase 3) and call `walrus.put(bytes)`; when flag is `false` or body omits `plaintext`, return HTTP 400 `{ error: { code: 'PLAINTEXT_DISABLED', stage: 'validate' } }`.
     - `GET /api/poc/forms/[blob_id]?raw=true`: call `walrus.get(blob_id)` and stream bytes back with `application/octet-stream`.
@@ -168,20 +168,20 @@ This plan implements the Walrus Testnet POC on branch `walrus-poc` (forked from 
     - Upload → GET round-trip returns byte-identical bytes (a single example, MSW-backed; the general property is 3.2).
     - _Requirements: R6.1, R6.4, R6.6_
 
-  - [-] 3.4 Phase 2 checkpoint and commit
+  - [x] 3.4 Phase 2 checkpoint and commit
     - Run `scripts/phase-verify.sh --probe /api/poc/forms --method POST --body '{"form_schema":{"id":"x","title":"t","fields":[],"version":1,"created_at":"2024-01-01T00:00:00Z"},"plaintext":true}'`.
     - Commit: `feat: add plaintext walrus round-trip (DEV_ALLOW_PLAINTEXT)`.
     - Ensure all tests pass, ask the user if questions arise.
     - _Requirements: R6.1, R6.5, R16.1, R16.3_
 
 - [ ] 4. Phase 3 — Seal encryption + encrypted round-trip
-  - [ ] 4.1 Implement `packages/shared/src/pretty-printer.ts` (RFC 8785 JCS)
+  - [x] 4.1 Implement `packages/shared/src/pretty-printer.ts` (RFC 8785 JCS)
     - Export `canonicalize(value): Uint8Array` and `canonicalizeToString(value): string`.
     - Depend on an existing JCS library (`@truestamp/canonify` or equivalent) if stable; otherwise implement per RFC 8785 §3 directly (≈80 LOC).
     - Reject `undefined`, functions, symbols, `NaN`, `±Infinity`, `bigint`.
     - _Requirements: R9.1, R9.2_
 
-  - [ ] 4.2 Implement `packages/shared/src/validator.ts` + `parser.ts`
+  - [x] 4.2 Implement `packages/shared/src/validator.ts` + `parser.ts`
     - `FIELD_TYPES = ['text','textarea','email','number','select','checkbox'] as const` (R19.9; note: design aligns `long_text`→`textarea` and drops `url` per R19.9 — the R19.9 palette wins, update the Zod enum accordingly).
     - `FormSchemaSchema` (title 1–200, max 50 fields, version literal 1, ISO datetime `created_at`), `PocFieldSchema` (label 1–100, optional `options` for `select`).
     - `SubmissionSchema` with `form_blob_id`, `form_schema_hash` (64-char hex), `answers`, `submitted_at`.
@@ -189,50 +189,50 @@ This plan implements the Walrus Testnet POC on branch `walrus-poc` (forked from 
     - `validateSubmissionAgainstForm(submission, form)` cross-check (answers ⊆ fields, required non-null, `form_schema_hash` equals recomputed hash).
     - _Requirements: R9.3, R9.6, R9.7, R10.1, R10.2, R12.2, R19.9_
 
-  - [ ] 4.3 Implement `packages/shared/src/schema-hash.ts`
+  - [x] 4.3 Implement `packages/shared/src/schema-hash.ts`
     - `schemaHash(value): Uint8Array` = `sha256(canonicalize(value))`.
     - `schemaHashHex(value): string` = hex-encoded.
     - _Requirements: R13.1, R13.4_
 
-  - [ ] 4.4 **PBT — R17.1 schema round-trip** and **R17.2 submission round-trip**
+  - [x] 4.4 **PBT — R17.1 schema round-trip** and **R17.2 submission round-trip**
     - **Property 1: parse(print(s)) == s for all valid FormSchema s** — fast-check arbitrary for `FormSchema` (respecting field-type enum, label 1–100, title 1–200, ≤50 fields); assert `parseFormSchema(canonicalize(s))` deep-equals `s`.
     - **Property 2: parse(print(r)) == r for all valid Submission r** — analogous arbitrary for `Submission`; assert round-trip.
     - **Also property-tests R9.5 (print(parse(b)) == b)**: generate arbitrary object, canonicalize once, parse, canonicalize again, assert byte equality.
     - **Validates: Requirements R9.4, R9.5, R17.1, R17.2**
     - _Requirements: R9.4, R9.5, R17.1, R17.2_
 
-  - [ ] 4.5 Implement `packages/seal/src/encrypted-blob.ts` wire format
+  - [x] 4.5 Implement `packages/seal/src/encrypted-blob.ts` wire format
     - `encode(blob)` / `decode(bytes)` / `looksLikeEncryptedBlob(bytes)` per the 82-byte header layout in design.md (version=0x01, schemeId=0x01, owner_address 32B, salt 16B, nonce 12B, tag 16B, blob_type 4B ASCII, ciphertext rest).
     - Throw `ParseError` on malformed headers (version mismatch, wrong length, unknown scheme).
     - _Requirements: R7.6, R8.6_
 
-  - [ ] 4.6 Implement `packages/seal/src/encryptor.ts` and `decryptor.ts` (Plan B fallback)
+  - [x] 4.6 Implement `packages/seal/src/encryptor.ts` and `decryptor.ts` (Plan B fallback)
     - `encrypt(plaintext, signer, blobType)`: HKDF-SHA-256 from `signer.deriveSymmetricKey(salt, info)` with `info = "sealbase-poc-v1|${blobType}|${signer.address}"`; AES-256-GCM with fresh 12B nonce; encode into wire format.
     - `decrypt(blobBytes, signer)`: decode; owner-address mismatch → `SealAuthError` (category `authorization`); malformed → `SealParseError` (category `parse`); GCM auth fail → `SealParseError` ("AES-GCM authentication failed").
     - Emit startup WARNING log `Seal fallback mode active — NOT real Seal` when `@mysten/seal` is unavailable; surface `seal.mode: 'fallback'` in `/api/poc/health`.
     - Plan A migration note as a code comment at the top of both files.
     - _Requirements: R7.1, R7.2, R7.4, R7.5, R7.6_
 
-  - [ ] 4.7 **PBT — R17.3 Seal round-trip + R17.8/R17.9 leak/owner invariants**
+  - [x] 4.7 **PBT — R17.3 Seal round-trip + R17.8/R17.9 leak/owner invariants**
     - **Property 3: decrypt(encrypt(p)) == p** — fast-check `uint8Array({ minLength: 1, maxLength: 1_048_576 })`; assert `decrypt(encrypt(p, signer, 'form'), signer)` bytewise equals `p`.
     - **Property 8 (supporting R17.8): public-unreadability** — assert `encrypt(p, signer, 'form')` does NOT contain `p` as a contiguous substring for every non-empty `p` (R7.4, R8.5).
     - **Property 9 (R17.9): owner-only decryption** — generate two signers `O`, `O'`; assert `decrypt(encrypt(p, O, 'form'), O')` throws `SealAuthError` and returns no plaintext bytes.
     - **Validates: Requirements R7.3, R7.4, R7.5, R8.5, R17.3, R17.8, R17.9**
     - _Requirements: R7.3, R7.4, R7.5, R8.5, R17.3, R17.8, R17.9_
 
-  - [ ] 4.8 Wire encrypted path into `apps/api/forms.ts`
+  - [x] 4.8 Wire encrypted path into `apps/api/forms.ts`
     - `POST /api/poc/forms` default path (no `plaintext: true`): validate → canonicalize → `schemaHashHex` → `Seal.encrypt` → `walrus.put` → return `{ blob_id, schema_hash, created_at }`. Sui anchoring is deferred to Phase 6 (returned `tx_digest` is `null` for now).
     - `GET /api/poc/forms/[blob_id]` (no `raw=true`): `walrus.get` → `Seal.decrypt` with current Local_Signer → `parseFormSchema` → return `{ form_schema, blob_id, schema_hash }`.
     - Validator rejects uploads that do not pass `looksLikeEncryptedBlob` when `DEV_ALLOW_PLAINTEXT=false` (R8.6).
     - _Requirements: R7.1, R7.2, R8.1, R8.2, R8.3, R8.6_
 
-  - [ ] 4.9 **PBT — R17.5 end-to-end pipeline round-trip** (apps/api integration test)
+  - [x] 4.9 **PBT — R17.5 end-to-end pipeline round-trip** (apps/api integration test)
     - **Property 5: decrypt(retrieve(upload(encrypt(print(x))))) == print(x)** — fast-check arbitrary `FormSchema`; POST through the real `apps/api/forms` handler with MSW-backed Walrus; GET back; assert decrypted bytes byte-equal the canonicalized input.
     - Deep-equality post-parse: assert `parseFormSchema(decrypted).deep_equals(x)`.
     - **Validates: Requirements R8.4, R17.5**
     - _Requirements: R8.4, R17.5_
 
-  - [ ] 4.10 Phase 3 checkpoint and commit
+  - [-] 4.10 Phase 3 checkpoint and commit
     - Run `scripts/phase-verify.sh --probe /api/poc/forms`.
     - Commit: `feat: implement encrypted blob uploads`.
     - Ensure all tests pass, ask the user if questions arise.
