@@ -1,7 +1,7 @@
 /**
  * Airtable import parser.
  *
- * Parses an Airtable base schema export and maps field types to SEALBASE
+ * Parses an Airtable base schema export and maps field types to Swrap
  * field types on a best-effort basis. Unsupported field types are skipped
  * and reported back to the caller.
  *
@@ -28,7 +28,7 @@ import type { FieldConfig, FieldOption, FieldType } from '@/types/form'
 // ─── Airtable field type map ──────────────────────────────────────────────────
 
 /**
- * Maps Airtable field types to SEALBASE field types.
+ * Maps Airtable field types to Swrap field types.
  * A value of `null` means the type is not supported and the field will be skipped.
  */
 const AIRTABLE_TYPE_MAP: Record<string, FieldType | null> = {
@@ -112,7 +112,7 @@ interface AirtableBaseSchema {
 // ─── Public types ─────────────────────────────────────────────────────────────
 
 export interface AirtableImportResult {
-  /** Mapped fields ready to be inserted into a SEALBASE form (without id/order). */
+  /** Mapped fields ready to be inserted into a Swrap form (without id/order). */
   fields: Omit<FieldConfig, 'id' | 'order'>[]
   /** Fields that were skipped because their type is not supported. */
   skippedFields: { title: string; type: string; reason: string }[]
@@ -193,7 +193,7 @@ export function parseAirtableExport(json: unknown): AirtableImportResult {
       skippedFields.push({
         title: airtableField.name ?? '(untitled)',
         type: airtableField.type,
-        reason: `Airtable field type "${airtableField.type}" is not supported in SEALBASE (computed/linked fields cannot be imported).`,
+        reason: `Airtable field type "${airtableField.type}" is not supported in Swrap (computed/linked fields cannot be imported).`,
       })
       continue
     }

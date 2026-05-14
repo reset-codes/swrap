@@ -29,6 +29,9 @@ export interface FormSettingsProps {
   isPublished?: boolean;
   onSave: (values: FormSettingsValues) => void;
   isSaving?: boolean;
+  onPublish?: () => void;
+  isPublishing?: boolean;
+  onChange?: (values: Partial<FormSettingsValues>) => void;
 }
 
 // ─── Slug generation ──────────────────────────────────────────────────────────
@@ -143,6 +146,9 @@ export function FormSettings({
   isPublished = false,
   onSave,
   isSaving = false,
+  onPublish,
+  isPublishing = false,
+  onChange,
 }: FormSettingsProps) {
   const uid = useId();
 
@@ -153,6 +159,11 @@ export function FormSettings({
   const [encryptionMode, setEncryptionMode] = useState<EncryptionMode>(
     initialValues?.encryptionMode ?? 'none',
   );
+
+  // Notify parent of initial state and subsequent changes
+  useEffect(() => {
+    onChange?.({ title, description, slug, mode, encryptionMode });
+  }, [title, description, slug, mode, encryptionMode, onChange]);
 
   const [titleError, setTitleError] = useState('');
   // Track whether the slug has been manually edited by the user
@@ -191,7 +202,8 @@ export function FormSettings({
     onSave({ title: title.trim(), description, slug, mode, encryptionMode });
   };
 
-  const slugPreview = slug ? `sealbase.app/f/${slug}` : 'sealbase.app/f/…';
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+  const slugPreview = slug ? `${appUrl.replace(/^https?:\/\//, '')}/f/${slug}` : 'swrap.app/f/…';
 
   return (
     <form
@@ -257,12 +269,24 @@ export function FormSettings({
             disabled={isPublished}
             aria-describedby={`${uid}-slug-preview`}
           />
-          <p
-            id={`${uid}-slug-preview`}
-            className="font-mono text-small text-text-muted mt-1"
-          >
-            {slugPreview}
-          </p>
+          <div className="flex flex-col gap-1">
+            <p
+              id={`${uid}-slug-preview`}
+              className="font-mono text-small text-text-muted mt-1"
+            >
+              {slugPreview}
+            </p>
+            {isPublished && (
+              <a
+                href={`${appUrl}/f/${slug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-small text-accent hover:underline"
+              >
+                View Public Form ↗
+              </a>
+            )}
+          </div>
         </div>
 
         {/* ── Form Mode ──────────────────────────────────────────────────── */}
@@ -327,9 +351,9 @@ export function FormSettings({
         </div>
       </div>
 
-      {/* ── Save button ────────────────────────────────────────────────────── */}
-      <div className="mt-6">
-        <Button type="submit" disabled={isSaving}>
+      {/* ── Actions ────────────────────────────────────────────────────────── */}
+      <div className="mt-6 flex items-center gap-3">
+        <Button type="submit" disabled={isSaving || isPublishing}>
           {isSaving ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
@@ -339,6 +363,24 @@ export function FormSettings({
             'Save Settings'
           )}
         </Button>
+
+        {!isPublished && onPublish && (
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={onPublish}
+            disabled={isSaving || isPublishing}
+          >
+            {isPublishing ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                Publishing…
+              </>
+            ) : (
+              'Publish Form'
+            )}
+          </Button>
+        )}
       </div>
     </form>
   );

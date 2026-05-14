@@ -1,44 +1,44 @@
 import type { Metadata } from 'next';
-import { Inter, JetBrains_Mono } from 'next/font/google';
+import { Geist, Geist_Mono } from 'next/font/google';
 import { Toaster } from 'sonner';
 import './globals.css';
 
-const inter = Inter({
+const geist = Geist({
   subsets: ['latin'],
-  variable: '--font-inter',
+  variable: '--font-geist',
   display: 'swap',
 });
 
-const jetbrainsMono = JetBrains_Mono({
+const geistMono = Geist_Mono({
   subsets: ['latin'],
-  variable: '--font-jetbrains-mono',
+  variable: '--font-geist-mono',
   display: 'swap',
   weight: ['400', '500'],
 });
 
 export const metadata: Metadata = {
   title: {
-    default: 'SEALBASE — Walrus-Native Form Infrastructure',
-    template: '%s | SEALBASE',
+    default: 'Swrap — Structured communication for modern communities',
+    template: '%s | Swrap',
   },
   description:
-    'Decentralized feedback and form infrastructure for Web3 teams. Web2 UX, Web3 infrastructure.',
-  keywords: ['forms', 'feedback', 'walrus', 'seal', 'web3', 'decentralized'],
-  authors: [{ name: 'SEALBASE' }],
+    'Create forms, collect submissions, and manage feedback with Walrus-native storage and private access control.',
+  keywords: ['forms', 'feedback', 'submissions', 'walrus', 'seal', 'structured communication'],
+  authors: [{ name: 'Swrap' }],
   openGraph: {
     type: 'website',
     locale: 'en_US',
     url: process.env.NEXT_PUBLIC_APP_URL,
-    siteName: 'SEALBASE',
-    title: 'SEALBASE — Walrus-Native Form Infrastructure',
+    siteName: 'Swrap',
+    title: 'Swrap — Structured communication for modern communities',
     description:
-      'Decentralized feedback and form infrastructure for Web3 teams. Web2 UX, Web3 infrastructure.',
+      'Create forms, collect submissions, and manage feedback with Walrus-native storage and private access control.',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'SEALBASE — Walrus-Native Form Infrastructure',
+    title: 'Swrap — Structured communication for modern communities',
     description:
-      'Decentralized feedback and form infrastructure for Web3 teams. Web2 UX, Web3 infrastructure.',
+      'Create forms, collect submissions, and manage feedback with Walrus-native storage and private access control.',
   },
   robots: {
     index: true,
@@ -52,7 +52,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`${geist.variable} ${geistMono.variable}`} suppressHydrationWarning>
       <body className="min-h-screen bg-background antialiased">
         {children}
         <Toaster
@@ -60,9 +60,9 @@ export default function RootLayout({
           toastOptions={{
             style: {
               background: '#FFFFFF',
-              border: '1px solid #E5E7EB',
-              color: '#111827',
-              fontFamily: 'var(--font-inter)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              color: '#FAFAFA',
+              fontFamily: 'var(--font-geist)',
               fontSize: '0.875rem',
             },
             duration: 4000,

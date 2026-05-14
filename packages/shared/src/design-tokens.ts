@@ -34,8 +34,8 @@ export type Radius = keyof typeof radius;
 
 export const typography = {
   family: {
-    sans: 'Inter, ui-sans-serif, system-ui, sans-serif',
-    mono: 'JetBrains Mono, ui-monospace, SFMono-Regular, Menlo, monospace',
+    sans: 'Geist, ui-sans-serif, system-ui, sans-serif',
+    mono: 'Geist Mono, ui-monospace, SFMono-Regular, Menlo, monospace',
   },
   // One of these two must be chosen at app bootstrap; see "Typeface" below.
   // Inter is the default for the POC. If the team switches to Geist, change

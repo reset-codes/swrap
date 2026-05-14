@@ -26,9 +26,10 @@ interface FieldListProps {
   onReorder: (fields: FieldConfig[]) => void;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
+  encryptionMode?: string;
 }
 
-export function FieldList({ fields, onReorder, onEdit, onDelete }: FieldListProps) {
+export function FieldList({ fields, onReorder, onEdit, onDelete, encryptionMode }: FieldListProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
 
   const sensors = useSensors(
@@ -86,6 +87,7 @@ export function FieldList({ fields, onReorder, onEdit, onDelete }: FieldListProp
               field={field}
               onEdit={onEdit}
               onDelete={onDelete}
+              encryptionMode={encryptionMode}
             />
           ))}
         </div>

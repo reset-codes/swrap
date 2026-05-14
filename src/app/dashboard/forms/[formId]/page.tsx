@@ -16,11 +16,13 @@ export default function EditFormPage() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [form, setForm] = useState<FormMetadata | null>(null);
   const [, setSchema] = useState<FormSchema | null>(null);
   const [fields, setFields] = useState<FieldConfig[]>([]);
+  const [encryptionMode, setEncryptionMode] = useState<string>('none');
 
   // ── Load form data ──────────────────────────────────────────────────────────
 
@@ -41,6 +43,7 @@ export default function EditFormPage() {
         setForm(formMeta);
         setSchema(formSchema);
         setFields(formSchema.fields || []);
+        setEncryptionMode(formMeta.encryptionMode);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An unexpected error occurred');
       } finally {
@@ -87,6 +90,40 @@ export default function EditFormPage() {
       setError('An unexpected error occurred. Please try again.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handlePublish = async () => {
+    setError(null);
+    setIsPublishing(true);
+
+    try {
+      const response = await fetch(`/api/forms/${formId}/publish`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        const message =
+          (data as ApiError).error?.message ??
+          'Failed to publish form. Please try again.';
+        setError(message);
+        return;
+      }
+
+      const json = (await response.json()) as ApiSuccess<{ publicUrl: string }>;
+      
+      // Update local state
+      if (form) {
+        setForm({ ...form, isPublished: true });
+      }
+      
+      router.refresh();
+      // Optionally show a success toast here
+    } catch {
+      setError('An unexpected error occurred. Please try again.');
+    } finally {
+      setIsPublishing(false);
     }
   };
 
@@ -145,14 +182,26 @@ export default function EditFormPage() {
           isPublished={form.isPublished}
           onSave={handleSave}
           isSaving={isSaving}
+          onPublish={handlePublish}
+          isPublishing={isPublishing}
+          onChange={(v) => v.encryptionMode && setEncryptionMode(v.encryptionMode)}
         />
 
         {/* Right — Builder */}
         <div className="rounded-lg border border-border bg-white p-6 shadow-sm">
-          <h2 className="text-h3 font-semibold text-text-primary mb-6">Form Fields</h2>
+          <div className="mb-6 flex items-center justify-between">
+            <h2 className="text-h3 font-semibold text-text-primary">Form Fields</h2>
+            {encryptionMode === 'full_submission' && (
+              <div className="flex items-center gap-1.5 rounded-full bg-accent-light/50 px-2.5 py-1 text-xs font-medium text-accent border border-accent/20">
+                <span className="h-1.5 w-1.5 rounded-full bg-accent animate-pulse" />
+                Fully Secured
+              </div>
+            )}
+          </div>
           <FormBuilder
             initialFields={fields}
             onFieldsChange={handleFieldsChange}
+            encryptionMode={encryptionMode}
           />
         </div>
       </div>

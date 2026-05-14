@@ -4,8 +4,8 @@ import { MobileSidebarToggle } from '@/components/dashboard/MobileSidebarToggle'
 
 export const metadata: Metadata = {
   title: {
-    default: 'Dashboard — SEALBASE',
-    template: '%s — SEALBASE',
+    default: 'Dashboard — Swrap',
+    template: '%s — Swrap',
   },
 };
 
@@ -42,7 +42,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Mobile top bar — shows hamburger + wordmark on small screens */}
         <div className="flex h-14 items-center gap-3 border-b border-border bg-surface px-4 lg:hidden">
           <MobileSidebarToggle />
-          <span className="text-h3 font-semibold tracking-tight text-text-primary">SEALBASE</span>
+          <span className="text-h3 font-semibold tracking-tight text-text-primary">Swrap</span>
         </div>
 
         {/* Page content */}

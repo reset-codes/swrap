@@ -2,9 +2,9 @@
  * Public form layout — no auth required.
  *
  * Renders:
- *   - Minimal header: SEALBASE wordmark + form title (passed via slot or title tag)
+ *   - Minimal header: Swrap wordmark + form title (passed via slot or title tag)
  *   - Centered content area: max-w-2xl
- *   - "Powered by SEALBASE" footer
+ *   - "Powered by Swrap" footer
  *
  * Requirements: R6, R14
  */
@@ -14,8 +14,8 @@ import type { ReactNode } from 'react';
 
 export const metadata: Metadata = {
   title: {
-    default: 'Form | SEALBASE',
-    template: '%s | SEALBASE',
+    default: 'Form | Swrap',
+    template: '%s | Swrap',
   },
 };
 
@@ -25,7 +25,7 @@ export default function PublicFormLayout({ children }: { children: ReactNode }) 
       {/* Minimal header */}
       <header className="border-b border-border bg-white px-6 py-4">
         <div className="mx-auto flex max-w-2xl items-center">
-          <span className="text-sm font-semibold tracking-tight text-text-primary">SEALBASE</span>
+          <span className="text-sm font-semibold tracking-tight text-text-primary">Swrap</span>
         </div>
       </header>
 
@@ -39,7 +39,7 @@ export default function PublicFormLayout({ children }: { children: ReactNode }) 
         <div className="mx-auto flex max-w-2xl items-center justify-center">
           <p className="text-small text-text-muted">
             Powered by{' '}
-            <span className="font-medium text-text-secondary">SEALBASE</span>
+            <span className="font-medium text-text-secondary">Swrap</span>
           </p>
         </div>
       </footer>

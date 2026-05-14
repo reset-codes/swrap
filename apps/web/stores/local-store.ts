@@ -2,7 +2,7 @@
  * Local_Store — Zustand + persist middleware
  *
  * Persists form and submission references in localStorage under the key
- * `sealbase-poc@1`. Plaintext payloads, decrypted blobs, and private key
+ * `swrap-poc@1`. Plaintext payloads, decrypted blobs, and private key
  * material are NEVER stored here (enforced by compile-time ForbiddenKey
  * assertions and the R11.3 requirement).
  *
@@ -277,7 +277,7 @@ export const useLocalStore = create<LocalStoreState>()(
       },
     }),
     {
-      name: 'sealbase-poc@1',
+      name: 'swrap-poc@1',
       storage: createSafeStorage(),
 
       // Exclude `scratch`, `storageError`, and `skippedEntries` from

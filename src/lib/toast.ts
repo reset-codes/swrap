@@ -1,5 +1,5 @@
 /**
- * Toast utility functions for SEALBASE.
+ * Toast utility functions for Swrap.
  *
  * Wraps sonner's toast API with typed helpers for all platform events.
  * Import `toasts` and call the relevant method — no need to import sonner directly.

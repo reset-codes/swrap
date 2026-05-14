@@ -1,5 +1,5 @@
 /**
- * Standard API response shapes for all SEALBASE API routes.
+ * Standard API response shapes for all Swrap API routes.
  * All API responses must conform to one of these two shapes.
  * See: ENGINEERING_RULES.md Rule 9
  */
@@ -34,7 +34,7 @@ export function apiError(code: string, message: string): ApiError {
 
 // ─── Common Error Codes ───────────────────────────────────────────────────────
 
-/** Standard error codes used across all SEALBASE API routes */
+/** Standard error codes used across all Swrap API routes */
 export const API_ERROR_CODES = {
   UNAUTHORIZED: 'UNAUTHORIZED',
   FORBIDDEN: 'FORBIDDEN',

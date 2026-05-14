@@ -50,7 +50,7 @@ export async function Sidebar() {
     >
       {/* ── Logo ─────────────────────────────────────────────────────────── */}
       <div className="flex h-14 items-center border-b border-border px-4">
-        <span className="text-h3 font-semibold tracking-tight text-text-primary">SEALBASE</span>
+        <span className="text-h3 font-semibold tracking-tight text-text-primary">Swrap</span>
       </div>
 
       {/* ── Navigation ───────────────────────────────────────────────────── */}

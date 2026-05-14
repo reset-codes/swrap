@@ -21,6 +21,7 @@ import type {
   UpdateFormInput,
 } from '@/types/form'
 import { checkSufficient, deduct } from './CreditService'
+import { createPolicy } from '@/lib/seal/client'
 
 // ─── ServiceError ─────────────────────────────────────────────────────────────
 
@@ -164,6 +165,13 @@ export async function createForm(
   const now = new Date().toISOString()
   const formId = crypto.randomUUID()
 
+  // Generate Seal policy if encryption is enabled
+  let sealPolicyId: string | undefined = undefined
+  if (input.encryptionMode !== 'none') {
+    const policy = await createPolicy(formId, ['admin', 'owner'])
+    sealPolicyId = policy.policyId
+  }
+
   const fields: FieldConfig[] = input.fields.map((f, index) => ({
     ...f,
     id: crypto.randomUUID(),
@@ -177,6 +185,7 @@ export async function createForm(
     slug,
     mode: input.mode,
     encryptionMode: input.encryptionMode,
+    sealPolicyId,
     fields,
     version: 1,
     createdAt: now,
@@ -226,6 +235,7 @@ export async function createForm(
         schemaBlobId: blobId,
         mode: input.mode,
         encryptionMode: input.encryptionMode,
+        sealPolicyId: sealPolicyId ?? null,
       },
     })
 
@@ -326,12 +336,23 @@ export async function updateForm(
 
   // ── Merge updates into schema ─────────────────────────────────────────────
   const now = new Date().toISOString()
+
+  // Handle Seal policy if encryption mode is changing or being enabled
+  let sealPolicyId = currentSchema.sealPolicyId
+  const newEncryptionMode = input.encryptionMode ?? currentSchema.encryptionMode
+  
+  if (newEncryptionMode !== 'none' && !sealPolicyId) {
+    const policy = await createPolicy(existing.id, ['admin', 'owner'])
+    sealPolicyId = policy.policyId
+  }
+
   const updatedSchema: FormSchema = {
     ...currentSchema,
     title: input.title ?? currentSchema.title,
     description: input.description ?? currentSchema.description,
     mode: input.mode ?? currentSchema.mode,
-    encryptionMode: input.encryptionMode ?? currentSchema.encryptionMode,
+    encryptionMode: newEncryptionMode,
+    sealPolicyId,
     fields: input.fields ?? currentSchema.fields,
     version: currentSchema.version + 1,
     updatedAt: now,
@@ -379,6 +400,7 @@ export async function updateForm(
             : existing.description,
         mode: input.mode ?? existing.mode,
         encryptionMode: input.encryptionMode ?? existing.encryptionMode,
+        sealPolicyId: sealPolicyId ?? null,
         schemaBlobId: newBlobId,
       },
     })
@@ -457,7 +479,7 @@ export async function publishForm(
   })
 
   const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL ?? 'https://sealbase.app'
+    process.env.NEXT_PUBLIC_APP_URL ?? 'https://swrap.app'
   const publicUrl = `${appUrl}/f/${published.slug}`
 
   return { publicUrl }

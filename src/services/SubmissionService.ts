@@ -1,7 +1,7 @@
 /**
  * SubmissionService — Submission CRUD business logic.
  *
- * Enforces the core submission invariants for SEALBASE:
+ * Enforces the core submission invariants for Swrap:
  *   1. Encrypt BEFORE store (Engineering Rule 6)
  *   2. Walrus write BEFORE PostgreSQL index (Engineering Rule 1)
  *   3. Submissions are IMMUTABLE — never update, only append status layers (Engineering Rule 3)

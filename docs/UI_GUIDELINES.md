@@ -1,10 +1,10 @@
-# SEALBASE — UI Guidelines
+# Swrap — UI Guidelines
 
 ## Design Language
 
 **Minimal. Premium. Calm. Structured.**
 
-SEALBASE should feel like a modern enterprise SaaS product — not a crypto dashboard, not a hackathon project. The aesthetic references are Linear, Typeform, Notion, Airtable, and Supabase.
+Swrap should feel like a modern SaaS product — not a crypto dashboard, not a hackathon project. The aesthetic references are Linear, Typeform, Notion, Airtable, Vercel, and Supabase.
 
 ---
 
@@ -246,7 +246,7 @@ const questionTransition = {
 │  [Table: all fields, scrollable]                    │
 │                                                     │
 ├─────────────────────────────────────────────────────┤
-│  Powered by SEALBASE (subtle footer)                │
+│  Powered by Swrap (subtle footer)                │
 └─────────────────────────────────────────────────────┘
 ```
 

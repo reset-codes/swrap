@@ -4,7 +4,7 @@ import { GoogleSignInButton } from '@/components/auth/GoogleSignInButton';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Sign In — SEALBASE',
+  title: 'Sign In — Swrap',
 };
 
 // ─── Error Message Map ────────────────────────────────────────────────────────
@@ -43,9 +43,9 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       <div className="rounded-lg border border-border bg-surface p-8 shadow-sm">
         {/* Wordmark */}
         <div className="mb-6 text-center">
-          <h1 className="text-h2 font-semibold tracking-tight text-text-primary">SEALBASE</h1>
+          <h1 className="text-h2 font-semibold tracking-tight text-text-primary">Swrap</h1>
           <p className="mt-1 text-small text-text-secondary">
-            Walrus-native form infrastructure
+            Structured communication for modern communities
           </p>
         </div>
 
@@ -87,8 +87,8 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
                 <input
                   type="email"
                   name="email"
-                  defaultValue="dev@sealbase.local"
-                  placeholder="dev@sealbase.local"
+                  defaultValue="dev@swrap.local"
+                  placeholder="dev@swrap.local"
                   className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50"
                 />
               </div>

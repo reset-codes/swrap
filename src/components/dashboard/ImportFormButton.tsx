@@ -72,7 +72,7 @@ export function ImportFormButton() {
               Import Form
             </Dialog.Title>
             <Dialog.Description className="text-body text-text-secondary mb-4">
-              Paste the JSON export from your external form provider to import it into SEALBASE.
+              Paste the JSON export from your external form provider to import it into Swrap.
             </Dialog.Description>
 
             <div className="space-y-4">

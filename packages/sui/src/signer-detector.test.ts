@@ -410,7 +410,7 @@ describe('PocSigner — public operations', () => {
     setupSuccessfulMocks(keypair);
 
     const { signer } = await detectLocalSigner();
-    const msg = new TextEncoder().encode('hello sealbase');
+    const msg = new TextEncoder().encode('hello swrap');
     const result = await signer.signPersonalMessage(msg);
     expect(result).toHaveProperty('signature');
     expect(result).toHaveProperty('bytes');

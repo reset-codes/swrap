@@ -1,7 +1,7 @@
 /**
  * Infrastructure Wallet Manager — shared types.
  *
- * The Infrastructure_Wallet is a SEALBASE-managed keypair that executes all
+ * The Infrastructure_Wallet is a Swrap-managed keypair that executes all
  * Walrus and Seal operations on behalf of Admins and Submitters. Submitters
  * never interact with wallets directly.
  *

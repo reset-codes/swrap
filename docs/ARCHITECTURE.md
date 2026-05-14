@@ -46,7 +46,7 @@ These are **design invariants**, not aspirations. Any requirement that conflicts
 │  /poc/forms/[blob_id]/fill  Form_Submission_UI                                │
 │  /poc/submissions/[blob_id] Owner-only submission view                        │
 │                                                                                │
-│  Zustand (persist) store: sealbase-poc@1                                      │
+│  Zustand (persist) store: swrap-poc@1                                      │
 │  localStorage (form & submission index)                                       │
 └───────────────────────────────────────────────────────────────────────────────┘
                                 │ fetch (same-origin)

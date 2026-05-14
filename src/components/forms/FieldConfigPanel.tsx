@@ -13,6 +13,7 @@ export interface FieldConfigPanelProps {
   field: FieldConfig | null; // null = panel closed
   onSave: (updates: Partial<Omit<FieldConfig, 'id' | 'order'>>) => void;
   onClose: () => void;
+  encryptionMode?: string;
 }
 
 // ─── Local form state ─────────────────────────────────────────────────────────
@@ -127,7 +128,7 @@ function FieldGroup({ label, htmlFor, children, error }: FieldGroupProps) {
 
 // ─── FieldConfigPanel ─────────────────────────────────────────────────────────
 
-export function FieldConfigPanel({ field, onSave, onClose }: FieldConfigPanelProps) {
+export function FieldConfigPanel({ field, onSave, onClose, encryptionMode }: FieldConfigPanelProps) {
   const uid = useId();
   const [state, setState] = useState<LocalFieldState>(() =>
     field ? initState(field) : initState({ id: '', type: 'short_text', label: '', required: false, encrypted: false, order: 0 }),
@@ -145,6 +146,7 @@ export function FieldConfigPanel({ field, onSave, onClose }: FieldConfigPanelPro
   if (!field) return null;
 
   const fieldType = field.type;
+  const isFieldLevelEncryption = encryptionMode === 'field_level';
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -178,10 +180,18 @@ export function FieldConfigPanel({ field, onSave, onClose }: FieldConfigPanelPro
     }
     setLabelError('');
 
+    // Determine encryption state based on form-level mode
+    let finalEncrypted = state.encrypted;
+    if (encryptionMode === 'full_submission') {
+      finalEncrypted = true;
+    } else if (encryptionMode === 'none') {
+      finalEncrypted = false;
+    }
+
     const updates: Partial<Omit<FieldConfig, 'id' | 'order'>> = {
       label: state.label.trim(),
       required: state.required,
-      encrypted: state.encrypted,
+      encrypted: finalEncrypted,
     };
 
     if (state.placeholder) updates.placeholder = state.placeholder;
@@ -232,11 +242,17 @@ export function FieldConfigPanel({ field, onSave, onClose }: FieldConfigPanelPro
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
-    <div className="rounded-lg border border-border bg-white p-6 shadow-sm">
+    <div className="sticky top-6 flex flex-col rounded-lg border border-border bg-white shadow-sm max-h-[calc(100vh-8rem)]">
       {/* Header */}
-      <h3 className="text-h3 font-semibold text-text-primary mb-4">Configure Field</h3>
+      <div className="shrink-0 p-6 border-b border-border">
+        <h3 className="text-h3 font-semibold text-text-primary">Configure Field</h3>
+        <p className="text-small text-text-secondary mt-1 capitalize">
+          {fieldType.replace('_', ' ')}
+        </p>
+      </div>
 
-      <div className="space-y-4">
+      {/* Scrollable content area */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
         {/* Label */}
         <FieldGroup label="Label" htmlFor={`${uid}-label`} error={labelError}>
           <Input
@@ -266,11 +282,18 @@ export function FieldConfigPanel({ field, onSave, onClose }: FieldConfigPanelPro
 
         {/* Help text */}
         <FieldGroup label="Help text" htmlFor={`${uid}-help`}>
-          <Input
+          <textarea
             id={`${uid}-help`}
             value={state.helpText}
             onChange={(e) => set('helpText', e.target.value)}
             placeholder="Additional guidance for respondents (optional)"
+            rows={2}
+            className={[
+              'flex w-full rounded-md border border-border bg-white px-3 py-2 text-sm text-text-primary shadow-sm',
+              'placeholder:text-text-muted resize-y',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/20 focus-visible:border-accent',
+              'disabled:cursor-not-allowed disabled:opacity-50',
+            ].join(' ')}
           />
         </FieldGroup>
 
@@ -282,20 +305,35 @@ export function FieldConfigPanel({ field, onSave, onClose }: FieldConfigPanelPro
           onChange={(v) => set('required', v)}
         />
 
-        {/* Encryption toggle */}
-        <ToggleRow
-          id={`${uid}-encrypted`}
-          label={
-            <span className="flex items-center gap-1.5">
-              Encrypt field
-              {state.encrypted && (
-                <Lock className="h-4 w-4 text-seal-brand" aria-label="Encryption enabled" />
-              )}
-            </span>
-          }
-          checked={state.encrypted}
-          onChange={(v) => set('encrypted', v)}
-        />
+        {/* Encryption toggle — only shown if form mode is field_level */}
+        {isFieldLevelEncryption && (
+          <ToggleRow
+            id={`${uid}-encrypted`}
+            label={
+              <span className="flex items-center gap-1.5">
+                Encrypt field
+                {state.encrypted && (
+                  <Lock className="h-4 w-4 text-seal-brand" aria-label="Encryption enabled" />
+                )}
+              </span>
+            }
+            checked={state.encrypted}
+            onChange={(v) => set('encrypted', v)}
+          />
+        )}
+
+        {/* Informative text for full submission encryption */}
+        {encryptionMode === 'full_submission' && (
+          <div className="rounded-md bg-accent-light/30 p-3 border border-accent/10">
+            <p className="text-small text-accent flex items-center gap-1.5 font-medium">
+              <Lock className="h-3.5 w-3.5" />
+              Fully Secured
+            </p>
+            <p className="text-xs text-text-secondary mt-1">
+              This field is automatically encrypted because full submission encryption is enabled.
+            </p>
+          </div>
+        )}
 
         {/* ── Type-specific controls ─────────────────────────────────────── */}
 
@@ -303,38 +341,40 @@ export function FieldConfigPanel({ field, onSave, onClose }: FieldConfigPanelPro
         {DROPDOWN_TYPES.includes(fieldType) && (
           <div className="flex flex-col gap-2">
             <span className="text-small font-medium text-text-primary">Options</span>
-            {state.options.map((opt, index) => (
-              <div key={opt.id} className="flex items-center gap-2">
-                <Input
-                  value={opt.label}
-                  onChange={(e) => updateOption(index, 'label', e.target.value)}
-                  placeholder="Option label"
-                  aria-label={`Option ${index + 1} label`}
-                />
-                <Input
-                  value={opt.value}
-                  onChange={(e) => updateOption(index, 'value', e.target.value)}
-                  placeholder="Value"
-                  aria-label={`Option ${index + 1} value`}
-                  className="w-32 shrink-0"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => removeOption(index)}
-                  aria-label={`Remove option ${index + 1}`}
-                >
-                  <Trash2 className="h-4 w-4 text-text-secondary" />
-                </Button>
-              </div>
-            ))}
+            <div className="space-y-2">
+              {state.options.map((opt, index) => (
+                <div key={opt.id} className="flex items-center gap-2">
+                  <Input
+                    value={opt.label}
+                    onChange={(e) => updateOption(index, 'label', e.target.value)}
+                    placeholder="Option label"
+                    aria-label={`Option ${index + 1} label`}
+                  />
+                  <Input
+                    value={opt.value}
+                    onChange={(e) => updateOption(index, 'value', e.target.value)}
+                    placeholder="Value"
+                    aria-label={`Option ${index + 1} value`}
+                    className="w-32 shrink-0"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => removeOption(index)}
+                    aria-label={`Remove option ${index + 1}`}
+                  >
+                    <Trash2 className="h-4 w-4 text-text-secondary" />
+                  </Button>
+                </div>
+              ))}
+            </div>
             <Button
               type="button"
               variant="secondary"
               size="sm"
               onClick={addOption}
-              className="self-start"
+              className="self-start mt-2"
             >
               <Plus className="h-4 w-4" />
               Add option
@@ -414,7 +454,7 @@ export function FieldConfigPanel({ field, onSave, onClose }: FieldConfigPanelPro
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-2 mt-6">
+      <div className="shrink-0 p-6 border-t border-border bg-muted/10 flex items-center gap-2">
         <Button type="button" onClick={handleSave}>
           Save Field
         </Button>

@@ -1,7 +1,7 @@
 /**
  * Infrastructure Wallet Manager.
  *
- * Manages the SEALBASE infrastructure keypair and wraps all Walrus and Seal
+ * Manages the Swrap infrastructure keypair and wraps all Walrus and Seal
  * operations with wallet-level context. This is the single point of contact
  * for all blockchain-adjacent operations — Submitters and Admins never
  * interact with wallets directly.

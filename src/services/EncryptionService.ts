@@ -1,7 +1,7 @@
 /**
  * EncryptionService — Field-level and full-submission encryption via Seal.
  *
- * Enforces the core encryption invariants for SEALBASE:
+ * Enforces the core encryption invariants for Swrap:
  *   1. Encrypted fields are encrypted via Seal BEFORE the payload is sent to Walrus (Engineering Rule 6)
  *   2. Plaintext values are NEVER logged, included in error messages, or persisted anywhere
  *   3. Decryption is always in-memory only — decrypted values are never persisted

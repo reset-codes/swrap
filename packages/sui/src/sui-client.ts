@@ -114,10 +114,10 @@ export async function getBalance(
 // ---------------------------------------------------------------------------
 
 /** Static test payload used for the handshake round-trip. */
-const TEST_PAYLOAD = new TextEncoder().encode('sealbase-poc-handshake');
+const TEST_PAYLOAD = new TextEncoder().encode('swrap-poc-handshake');
 
 /**
- * Sign the static "sealbase-poc-handshake" payload with `signer` and verify
+ * Sign the static "swrap-poc-handshake" payload with `signer` and verify
  * the resulting signature. Returns `{ signature, valid }`.
  *
  * Throws `SuiClientError` with code `TX_FAILED` if verification fails.

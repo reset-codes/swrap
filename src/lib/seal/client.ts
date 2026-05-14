@@ -29,9 +29,9 @@ import type { PocSigner } from '@poc/sui';
  * This is a lightweight wrapper around Ed25519Keypair to match @poc/seal's PocSigner interface.
  */
 function getPocSignerFromKey(privateKey: string): PocSigner {
-  const { schema, secretKey } = decodeSuiPrivateKey(privateKey);
-  if (schema !== 'ED25519') {
-    throw new Error(`Unsupported key schema: ${schema}. Only ED25519 is supported.`);
+  const { scheme, secretKey } = decodeSuiPrivateKey(privateKey);
+  if (scheme !== 'ED25519') {
+    throw new Error(`Unsupported key schema: ${scheme}. Only ED25519 is supported.`);
   }
   const kp = Ed25519Keypair.fromSecretKey(secretKey);
 

@@ -69,7 +69,7 @@ All spacing values come from `packages/shared/src/design-tokens.ts` → `spacing
 
 Sourced from `packages/shared/src/design-tokens.ts` → `typography`.
 
-**Typeface:** Inter (loaded via `apps/web/fonts.ts` using `next/font/google`). Geist is the alternative — if the team switches, change `typography.family.sans` in `design-tokens.ts` and nowhere else. No other font families are permitted in the POC UI.
+**Typeface:** Geist (loaded via `apps/web/fonts.ts` using `next/font/google`). Inter is the alternative — if the team switches, change `typography.family.sans` in `design-tokens.ts` and nowhere else. No other font families are permitted in the POC UI.
 
 **Size scale:**
 

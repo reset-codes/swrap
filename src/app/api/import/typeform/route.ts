@@ -1,7 +1,7 @@
 /**
  * POST /api/import/typeform
  *
- * Accepts a Typeform JSON export, maps field types to SEALBASE equivalents,
+ * Accepts a Typeform JSON export, maps field types to Swrap equivalents,
  * and creates a draft Form record in PostgreSQL (no Walrus write — drafts do
  * not consume storage credits).
  *

@@ -1,27 +1,27 @@
-# SEALBASE — Core Ideology
+# Swrap — Core Ideology
 
-## What SEALBASE Is
+## What Swrap Is
 
-SEALBASE is the **feedback infrastructure layer for the Walrus ecosystem**.
+Swrap is the **structured communication layer for modern communities**.
 
-It is a Walrus-native decentralized feedback and form infrastructure platform built for Web3 teams, startups, hackathon builders, communities, and ecosystem explorers. It is not a generic form builder clone. It is not a crypto dashboard. It is a real startup product that happens to use decentralized infrastructure.
+It is a Walrus-native submission, feedback, and review platform built for Web3 teams, startups, communities, and ecosystem builders. It is not a generic form builder clone. It is not a crypto dashboard. It is a real startup product that happens to use decentralized infrastructure.
 
 ---
 
 ## The Core Thesis
 
-> "Web2 UX. Web3 Infrastructure."
+> "Software-first. Blockchain underneath."
 
 Submitters should never know they are interacting with a blockchain. Admins get the power of decentralized, censorship-resistant, append-only storage — without sacrificing usability.
 
-SEALBASE exists at the intersection of:
+Swrap exists at the intersection of:
 - **Walrus** — decentralized blob storage as the canonical source of truth
 - **Seal** — encryption and access control for sensitive submissions
 - **Modern product design** — Linear, Typeform, Notion, Airtable, Supabase as aesthetic references
 
 ---
 
-## What SEALBASE Is NOT
+## What Swrap Is NOT
 
 - Not a blockchain-heavy app
 - Not wallet-required for submitters
@@ -46,7 +46,7 @@ Data is append-only and immutable after submission. The system is designed so th
 Speed, clarity, and professionalism are non-negotiable. A submitter filling out a bug report should have a better experience than filling out a Google Form. An admin reviewing submissions should have a better experience than using Airtable.
 
 ### 4. Infrastructure-Focused
-SEALBASE is infrastructure, not just a product. Teams embed it. Ecosystems adopt it. It becomes the default way Web3 projects collect structured feedback from their communities.
+Swrap is infrastructure, not just a product. Teams embed it. Ecosystems adopt it. It becomes the default way Web3 projects collect structured feedback from their communities.
 
 ### 5. Append-Only, Collaboration-Oriented
 Submissions are immutable. Status changes, admin notes, and resolution states are layered on top — never replacing the original. This creates an auditable, trustworthy record.
@@ -55,12 +55,12 @@ Submissions are immutable. Status changes, admin notes, and resolution states ar
 
 ## The Storage Credit Model
 
-Admins deposit WAL or SUI as storage credits. SEALBASE infrastructure wallets manage all Walrus interactions on behalf of submitters. Submitters never touch crypto. Admins control the economics.
+Admins deposit WAL or SUI as storage credits. Swrap infrastructure wallets manage all Walrus interactions on behalf of submitters. Submitters never touch crypto. Admins control the economics.
 
 This model:
 - Removes friction for submitters entirely
 - Gives admins predictable cost control
-- Keeps SEALBASE sustainable as infrastructure
+- Keeps Swrap sustainable as infrastructure
 
 ---
 
@@ -71,13 +71,13 @@ Seal provides field-level and full-submission encryption. The default posture:
 - Submission payload is encrypted
 - Only authorized admins with the correct Seal policy may decrypt
 
-This makes SEALBASE suitable for sensitive use cases: contributor applications, private bug reports, confidential feedback, ecosystem onboarding with PII.
+This makes Swrap suitable for sensitive use cases: contributor applications, private bug reports, confidential feedback, ecosystem onboarding with PII.
 
 ---
 
 ## Design Philosophy
 
-The product should feel like **Linear met Typeform and built something for Web3 teams**.
+The product should feel like **Linear met Typeform and built something for modern communities**.
 
 - Minimal, premium, calm, structured
 - Clean typography, intentional whitespace
@@ -91,4 +91,4 @@ Every component, every screen, every interaction should feel like it belongs to 
 
 ## The North Star
 
-> SEALBASE should feel like "a real startup product that happens to use decentralized infrastructure" — not "a hackathon prototype using Walrus."
+> Swrap should feel like "a real startup product that happens to use decentralized infrastructure" — not "a hackathon prototype using Walrus."

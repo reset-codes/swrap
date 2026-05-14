@@ -1,4 +1,4 @@
-// ─── SEALBASE — Prisma Schema ─────────────────────────────────────────────────
+// ─── Swrap — Prisma Schema ────────────────────────────────────────────────────
 //
 // PostgreSQL is the INDEX LAYER ONLY. It is non-authoritative and reconstructable.
 // All meaningful data lives on Walrus. This schema stores only references and metadata.

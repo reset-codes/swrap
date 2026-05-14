@@ -271,7 +271,7 @@ describe('merge callback — corrupt entry handling (R11.7)', () => {
     };
 
     // Write to the mocked localStorage
-    localStorageMock.setItem('sealbase-poc@1', JSON.stringify({ state: persistedState, version: 0 }));
+    localStorageMock.setItem('swrap-poc@1', JSON.stringify({ state: persistedState, version: 0 }));
 
     // Trigger rehydration
     await useLocalStore.persist.rehydrate();
@@ -302,7 +302,7 @@ describe('merge callback — corrupt entry handling (R11.7)', () => {
       },
     };
 
-    localStorageMock.setItem('sealbase-poc@1', JSON.stringify({ state: persistedState, version: 0 }));
+    localStorageMock.setItem('swrap-poc@1', JSON.stringify({ state: persistedState, version: 0 }));
 
     await useLocalStore.persist.rehydrate();
 
@@ -371,7 +371,7 @@ describe('round-trip persist → reload (R11.1, R11.2)', () => {
       forms: { [entry.blobId]: entry },
       submissions: {},
     };
-    localStorageMock.setItem('sealbase-poc@1', JSON.stringify({ state: persistedState, version: 0 }));
+    localStorageMock.setItem('swrap-poc@1', JSON.stringify({ state: persistedState, version: 0 }));
 
     // Rehydrate — this reads from localStorage and calls merge()
     await useLocalStore.persist.rehydrate();
@@ -388,7 +388,7 @@ describe('round-trip persist → reload (R11.1, R11.2)', () => {
       forms: {},
       submissions: { [entry.blobId]: entry },
     };
-    localStorageMock.setItem('sealbase-poc@1', JSON.stringify({ state: persistedState, version: 0 }));
+    localStorageMock.setItem('swrap-poc@1', JSON.stringify({ state: persistedState, version: 0 }));
 
     await useLocalStore.persist.rehydrate();
 

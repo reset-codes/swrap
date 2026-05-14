@@ -28,7 +28,7 @@ export async function generateMetadata({ params }: PublicFormPageProps): Promise
     const schema = await getFormBySlug(slug);
     return {
       title: schema.title,
-      description: schema.description ?? `Fill out ${schema.title} on SEALBASE`,
+      description: schema.description ?? `Fill out ${schema.title} on Swrap`,
     };
   } catch {
     return { title: 'Form Not Found' };

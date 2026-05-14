@@ -64,7 +64,7 @@ if (process.env.NODE_ENV === 'development') {
       id: 'dev-login',
       name: 'Dev Login',
       credentials: {
-        email: { label: 'Email', type: 'email', placeholder: 'dev@sealbase.local' },
+        email: { label: 'Email', type: 'email', placeholder: 'dev@swrap.local' },
       },
       async authorize(credentials) {
         const email = credentials?.email as string;

@@ -59,7 +59,7 @@ export function AddFieldButton({ onAddField }: AddFieldButtonProps) {
           <div
             role="listbox"
             aria-label="Field types"
-            className="absolute left-0 top-full z-20 mt-1 w-52 rounded-md border border-border bg-white py-1 shadow-md"
+            className="absolute left-0 top-full z-20 mt-1 w-52 rounded-md border border-border bg-white py-1 shadow-md max-h-80 overflow-y-auto"
           >
             {FIELD_TYPES.map((type) => (
               <button

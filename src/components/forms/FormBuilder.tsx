@@ -11,9 +11,14 @@ import type { FieldConfig, FieldType } from '@/types/form';
 interface UseFormBuilderOptions {
   initialFields?: FieldConfig[];
   onFieldsChange?: (fields: FieldConfig[]) => void;
+  encryptionMode?: string;
 }
 
-export function useFormBuilder({ initialFields = [], onFieldsChange }: UseFormBuilderOptions = {}) {
+export function useFormBuilder({ 
+  initialFields = [], 
+  onFieldsChange,
+  encryptionMode 
+}: UseFormBuilderOptions = {}) {
   const [fields, setFields] = useState<FieldConfig[]>(initialFields);
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
 
@@ -32,7 +37,9 @@ export function useFormBuilder({ initialFields = [], onFieldsChange }: UseFormBu
         type,
         label: '',
         required: false,
-        encrypted: false,
+        // Only default to encrypted if full_submission is selected.
+        // If 'none' or 'field_level', the initial state should be false.
+        encrypted: encryptionMode === 'full_submission',
         order: fields.length,
       };
       const next = [...fields, newField];
@@ -40,7 +47,7 @@ export function useFormBuilder({ initialFields = [], onFieldsChange }: UseFormBu
       // Immediately open the new field for editing
       setEditingFieldId(newField.id);
     },
-    [fields, updateFields],
+    [fields, updateFields, encryptionMode],
   );
 
   const removeField = useCallback(
@@ -87,9 +94,10 @@ export function useFormBuilder({ initialFields = [], onFieldsChange }: UseFormBu
 interface FormBuilderProps {
   initialFields?: FieldConfig[];
   onFieldsChange?: (fields: FieldConfig[]) => void;
+  encryptionMode?: string;
 }
 
-export function FormBuilder({ initialFields, onFieldsChange }: FormBuilderProps) {
+export function FormBuilder({ initialFields, onFieldsChange, encryptionMode }: FormBuilderProps) {
   const {
     fields,
     editingFieldId,
@@ -98,7 +106,7 @@ export function FormBuilder({ initialFields, onFieldsChange }: FormBuilderProps)
     removeField,
     reorderFields,
     updateField,
-  } = useFormBuilder({ initialFields, onFieldsChange });
+  } = useFormBuilder({ initialFields, onFieldsChange, encryptionMode });
 
   const editingField = editingFieldId ? (fields.find((f) => f.id === editingFieldId) ?? null) : null;
 
@@ -125,6 +133,7 @@ export function FormBuilder({ initialFields, onFieldsChange }: FormBuilderProps)
         onReorder={reorderFields}
         onEdit={setEditingFieldId}
         onDelete={removeField}
+        encryptionMode={encryptionMode}
       />
 
       {/* Field config panel */}
@@ -132,6 +141,7 @@ export function FormBuilder({ initialFields, onFieldsChange }: FormBuilderProps)
         field={editingField}
         onSave={handleSave}
         onClose={() => setEditingFieldId(null)}
+        encryptionMode={encryptionMode}
       />
     </div>
   );

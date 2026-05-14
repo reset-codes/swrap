@@ -12,9 +12,10 @@ interface FieldListItemProps {
   field: FieldConfig;
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
+  encryptionMode?: string;
 }
 
-export function FieldListItem({ field, onEdit, onDelete }: FieldListItemProps) {
+export function FieldListItem({ field, onEdit, onDelete, encryptionMode }: FieldListItemProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: field.id,
   });
@@ -72,7 +73,7 @@ export function FieldListItem({ field, onEdit, onDelete }: FieldListItemProps) {
           {FIELD_TYPE_LABELS[field.type]}
         </span>
 
-        {field.encrypted && (
+        {field.encrypted && encryptionMode !== 'full_submission' && (
           <span
             className="shrink-0 text-seal-brand"
             aria-label="Encrypted field"

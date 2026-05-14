@@ -149,8 +149,8 @@ function buildTailwindTheme() {
     sans: [typography.family.sans],
     mono: [typography.family.mono],
     // Preserved existing CSS-variable-based keys (used by existing pages)
-    'sans-var': ['var(--font-inter)', 'system-ui', 'sans-serif'],
-    'mono-var': ['var(--font-jetbrains-mono)', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+    'sans-var': ['var(--font-geist)', 'system-ui', 'sans-serif'],
+    'mono-var': ['var(--font-geist-mono)', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
   };
 
   // --- fontSize ---

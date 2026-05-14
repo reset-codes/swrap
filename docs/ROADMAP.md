@@ -1,6 +1,6 @@
-# POC to Production Roadmap
+# Swrap — Roadmap
 
-> **Scope:** This document describes the migration path from the `walrus-poc` branch proof of concept to a production-ready SEALBASE platform. It is organized into three stages.
+> **Scope:** This document describes the migration path from the `walrus-poc` branch proof of concept to a production-ready Swrap platform. It is organized into three stages.
 
 ---
 
@@ -16,7 +16,7 @@
 
 ## Stage 1 — POC (Current)
 
-**Goal:** Validate the complete SEALBASE data flow end-to-end on a single developer machine connected to Sui testnet and Walrus testnet.
+**Goal:** Validate the complete Swrap data flow end-to-end on a single developer machine connected to Sui testnet and Walrus testnet.
 
 **What it proves:**
 - Encrypted form schemas and encrypted submissions can be uploaded to Walrus testnet
@@ -43,7 +43,7 @@
 
 ## Stage 2 — Beta
 
-**Goal:** A hosted, multi-user backend with real authentication, storage accounting, and the real Seal SDK.
+**Goal:** A hosted, multi-user backend with real authentication, storage accounting, and the real Seal SDK for the Swrap platform.
 
 ### What needs to change
 

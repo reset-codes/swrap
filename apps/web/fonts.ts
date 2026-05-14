@@ -6,6 +6,6 @@
  *
  * Requirements: R19.3
  */
-import { Inter } from 'next/font/google';
+import { Geist } from 'next/font/google';
 
-export const appFont = Inter({ subsets: ['latin'], variable: '--font-inter' });
+export const appFont = Geist({ subsets: ['latin'], variable: '--font-geist' });

@@ -19,7 +19,7 @@ export function PocHeader() {
           className="flex items-center gap-2 text-token-base font-semibold text-text-primary hover:text-accent-base transition-colors duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 rounded-sm"
         >
           <span className="text-accent-base" aria-hidden="true">■</span>
-          <span>SEALBASE</span>
+          <span>Swrap</span>
           <span className="text-token-xs font-medium text-text-secondary uppercase tracking-wide">
             POC
           </span>

@@ -1,7 +1,7 @@
 /**
  * packages/seal/src/encrypted-blob.ts
  *
- * Wire format codec for the SEALBASE encrypted blob format (Plan B fallback).
+ * Wire format codec for the Swrap encrypted blob format (Plan B fallback).
  *
  * Plan A migration note: when @mysten/seal stabilizes, this file will be
  * updated to use version 0x02 for Seal SDK blobs. Version 0x01 blobs (this
@@ -142,7 +142,7 @@ export function encode(blob: EncryptedBlob): Uint8Array {
     return out;
   }
 
-  throw new ParseError(`unsupported version for encoding: ${header.version}`);
+  throw new ParseError(`unsupported version for encoding: ${(header as any).version}`);
 }
 
 /**

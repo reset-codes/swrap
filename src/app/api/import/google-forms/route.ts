@@ -1,7 +1,7 @@
 /**
  * POST /api/import/google-forms
  *
- * Accepts a Google Forms JSON export, maps question types to SEALBASE
+ * Accepts a Google Forms JSON export, maps question types to Swrap
  * equivalents, and creates a draft Form record in PostgreSQL (no Walrus
  * write — drafts do not consume storage credits).
  *

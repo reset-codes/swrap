@@ -19,6 +19,9 @@ export default function NewFormPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  // Track settings (like encryptionMode) to pass to FormBuilder
+  const [encryptionMode, setEncryptionMode] = useState<string>('none');
+
   // Track fields from the FormBuilder
   const [fields, setFields] = useState<FieldConfig[]>([]);
 
@@ -92,12 +95,27 @@ export default function NewFormPage() {
       {/* Two-column layout on lg+ */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">
         {/* Left — Settings */}
-        <FormSettings onSave={handleSave} isSaving={isSaving} />
+        <FormSettings 
+          onSave={handleSave} 
+          isSaving={isSaving} 
+          onChange={(v) => v.encryptionMode && setEncryptionMode(v.encryptionMode)}
+        />
 
         {/* Right — Builder */}
         <div className="rounded-lg border border-border bg-white p-6 shadow-sm">
-          <h2 className="text-h3 font-semibold text-text-primary mb-6">Form Fields</h2>
-          <FormBuilder onFieldsChange={handleFieldsChange} />
+          <div className="mb-6 flex items-center justify-between">
+            <h2 className="text-h3 font-semibold text-text-primary">Form Fields</h2>
+            {encryptionMode === 'full_submission' && (
+              <div className="flex items-center gap-1.5 rounded-full bg-accent-light/50 px-2.5 py-1 text-xs font-medium text-accent border border-accent/20">
+                <span className="h-1.5 w-1.5 rounded-full bg-accent animate-pulse" />
+                Fully Secured
+              </div>
+            )}
+          </div>
+          <FormBuilder 
+            onFieldsChange={handleFieldsChange} 
+            encryptionMode={encryptionMode}
+          />
         </div>
       </div>
     </div>

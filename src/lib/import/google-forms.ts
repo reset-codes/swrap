@@ -2,7 +2,7 @@
  * Google Forms import parser.
  *
  * Parses a Google Forms JSON export (Google Forms API shape) and maps
- * question types to SEALBASE field types on a best-effort basis.
+ * question types to Swrap field types on a best-effort basis.
  * Unsupported types are skipped and reported back to the caller.
  *
  * Requirements: R17
@@ -13,7 +13,7 @@ import type { FieldConfig, FieldOption, FieldType } from '@/types/form'
 // ─── Public types ─────────────────────────────────────────────────────────────
 
 export interface GoogleFormsImportResult {
-  /** Mapped fields ready to be inserted into a SEALBASE form (without id/order). */
+  /** Mapped fields ready to be inserted into a Swrap form (without id/order). */
   fields: Omit<FieldConfig, 'id' | 'order'>[]
   /** Fields that were skipped because their type is not supported. */
   skippedFields: { title: string; type: string; reason: string }[]

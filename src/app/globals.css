@@ -4,7 +4,7 @@
 
 @layer base {
   :root {
-    /* SEALBASE Design Token CSS Variables */
+    /* Swrap Design Token CSS Variables — Light Mode */
 
     /* Background & Surface */
     --background: 0 0% 98%; /* #FAFAFA */
@@ -47,7 +47,7 @@
     /* Border radius */
     --radius: 0.5rem;
 
-    /* SEALBASE Brand Colors */
+    /* Swrap Brand Colors */
     --walrus-brand: 199 89% 48%; /* #0EA5E9 */
     --seal-brand: 263 70% 50%; /* #7C3AED */
 
@@ -58,33 +58,33 @@
   }
 
   .dark {
-    --background: 222 47% 11%;
-    --surface: 222 47% 14%;
-    --foreground: 210 40% 98%;
+    --background: 0 0% 4%; /* #0A0A0A */
+    --surface: 0 0% 7%; /* #111111 */
+    --foreground: 0 0% 98%; /* #FAFAFA */
 
-    --card: 222 47% 14%;
-    --card-foreground: 210 40% 98%;
+    --card: 0 0% 7%;
+    --card-foreground: 0 0% 98%;
 
-    --popover: 222 47% 14%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 0 0% 7%;
+    --popover-foreground: 0 0% 98%;
 
     --primary: 221 83% 53%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 0 0% 11%;
+    --secondary-foreground: 0 0% 98%;
 
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 0 0% 11%;
+    --muted-foreground: 240 5% 64%; /* #A1A1AA */
 
-    --accent: 217 33% 17%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 0 0% 11%;
+    --accent-foreground: 0 0% 98%;
 
     --destructive: 0 63% 31%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive-foreground: 0 0% 98%;
 
-    --border: 217 33% 17%;
-    --input: 217 33% 17%;
+    --border: 0 0% 100% / 0.08; /* rgba(255,255,255,0.08) */
+    --input: 0 0% 11%;
     --ring: 221 83% 53%;
   }
 }
@@ -96,7 +96,7 @@
 
   body {
     @apply bg-background text-text-primary;
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'Geist', var(--font-geist), system-ui, sans-serif;
     font-feature-settings: 'rlig' 1, 'calt' 1;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -107,7 +107,7 @@
   kbd,
   samp,
   pre {
-    font-family: var(--font-jetbrains-mono), Menlo, Monaco, Consolas, monospace;
+    font-family: var(--font-geist-mono), 'Geist Mono', Menlo, Monaco, Consolas, monospace;
   }
 
   /* Focus ring styles */

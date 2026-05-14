@@ -50,7 +50,7 @@ export function MobileSidebarToggle() {
       >
         {/* Header row */}
         <div className="flex h-14 items-center justify-between border-b border-border px-4">
-          <span className="text-h3 font-semibold tracking-tight text-text-primary">SEALBASE</span>
+          <span className="text-h3 font-semibold tracking-tight text-text-primary">Swrap</span>
           <Button
             variant="ghost"
             size="icon"

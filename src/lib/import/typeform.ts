@@ -1,7 +1,7 @@
 /**
  * Typeform import parser.
  *
- * Parses a Typeform JSON export and maps field types to SEALBASE field types
+ * Parses a Typeform JSON export and maps field types to Swrap field types
  * on a best-effort basis. Unsupported field types are skipped and reported
  * back to the caller.
  *
@@ -13,7 +13,7 @@ import type { FieldConfig, FieldOption, FieldType } from '@/types/form'
 // ─── Typeform type map ────────────────────────────────────────────────────────
 
 /**
- * Maps Typeform field types to SEALBASE field types.
+ * Maps Typeform field types to Swrap field types.
  * A value of `null` means the type is not supported and the field will be skipped.
  */
 const TYPEFORM_TYPE_MAP: Record<string, FieldType | null> = {
@@ -67,7 +67,7 @@ interface TypeformField {
 // ─── Public types ─────────────────────────────────────────────────────────────
 
 export interface TypeformImportResult {
-  /** Mapped fields ready to be inserted into a SEALBASE form (without id/order). */
+  /** Mapped fields ready to be inserted into a Swrap form (without id/order). */
   fields: Omit<FieldConfig, 'id' | 'order'>[]
   /** Fields that were skipped because their type is not supported. */
   skippedFields: { title: string; type: string; reason: string }[]
@@ -137,7 +137,7 @@ export function parseTypeformExport(json: unknown): TypeformImportResult {
       skippedFields.push({
         title: tf.title ?? '(untitled)',
         type: tf.type,
-        reason: `Typeform field type "${tf.type}" is not supported in SEALBASE.`,
+        reason: `Typeform field type "${tf.type}" is not supported in Swrap.`,
       })
       continue
     }

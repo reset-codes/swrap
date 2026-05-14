@@ -64,6 +64,11 @@ export async function checkSufficient(
   adminId: string,
   estimatedCost: number,
 ): Promise<boolean> {
+  // R10.x: Allow bypass for development testing
+  if (process.env.DEV_BYPASS_STORAGE === 'true') {
+    return true
+  }
+
   const balance = await getBalance(adminId)
   return balance >= estimatedCost
 }
@@ -83,6 +88,11 @@ export async function deduct(
   amount: number,
   walrusBlobId: string,
 ): Promise<void> {
+  // R10.x: Allow bypass for development testing
+  if (process.env.DEV_BYPASS_STORAGE === 'true') {
+    return
+  }
+
   // Ensure a StorageCredit record exists for this user
   const credit = await prisma.storageCredit.findUnique({
     where: { userId: adminId },

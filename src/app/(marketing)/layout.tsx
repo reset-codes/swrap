@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'SEALBASE — Walrus-Native Form Infrastructure',
+  title: 'Swrap — Structured communication for modern communities',
   description:
-    'Collect feedback, bug reports, and surveys. All data stored on Walrus. No wallet required for submitters.',
+    'Create forms, collect submissions, and manage feedback with Walrus-native storage and private access control.',
 };
 
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
