@@ -123,7 +123,7 @@ interface AlreadyCertifiedResponse {
   };
 }
 
-type PublisherResponse = NewlyCreatedResponse | AlreadyCertifiedResponse;
+// type PublisherResponse = NewlyCreatedResponse | AlreadyCertifiedResponse;
 
 function isNewlyCreated(r: unknown): r is NewlyCreatedResponse {
   return (

@@ -1,0 +1,34 @@
+version: '3.9'
+
+services:
+  swrap-api:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    ports:
+      - "4000:4000"
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      # POC flags
+      DEV_BYPASS_STORAGE: "false"
+      DEV_LOCAL_SIGNER: "false"
+      DEV_ALLOW_PLAINTEXT: "false"
+      USE_WALRUS_TESTNET: "true"
+      USE_SUI_TESTNET: "true"
+      POC_ALLOW_PROD: "true"
+      # Endpoints (defaults to testnet public nodes)
+      SUI_RPC_URL: "https://fullnode.testnet.sui.io:443"
+      WALRUS_PUBLISHER_URL: "https://publisher.walrus-testnet.walrus.space"
+      WALRUS_AGGREGATOR_URL: "https://aggregator.walrus-testnet.walrus.space"
+      # Secrets — inject from host env or Docker secrets in real deployment
+      INFRA_WALLET_PRIVATE_KEY: "${INFRA_WALLET_PRIVATE_KEY}"
+      SUI_POC_PACKAGE_ID: "${SUI_POC_PACKAGE_ID}"
+      API_SECRET_KEY: "${API_SECRET_KEY}"
+      API_CORS_ORIGINS: "${API_CORS_ORIGINS:-*}"
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

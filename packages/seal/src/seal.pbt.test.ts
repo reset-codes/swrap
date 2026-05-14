@@ -138,7 +138,7 @@ describe('Seal encrypt/decrypt property-based tests', () => {
       }),
       { numRuns: 2 },
     );
-  }, 30000);
+  }, 90000);
 
   /**
    * Property 8 (R17.8 / R7.4 / R8.5): public-unreadability

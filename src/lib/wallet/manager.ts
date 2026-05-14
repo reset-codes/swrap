@@ -10,7 +10,7 @@
  *   - INFRA_WALLET_PRIVATE_KEY is NEVER logged, included in error messages,
  *     returned in API responses, or serialized anywhere.
  *   - Decrypted plaintext values are NEVER logged or persisted.
- *   - All error messages are safe for external consumption.
+ *   - All error messages surfaced to callers are safe for external consumption.
  *
  * Environment variables:
  *   INFRA_WALLET_PRIVATE_KEY — the infrastructure wallet private key.
@@ -38,7 +38,6 @@ import { WalletError } from './types'
 export function getInfraWalletKey(): string {
   const key = process.env.INFRA_WALLET_PRIVATE_KEY
   if (!key || key.trim() === '') {
-    // Safe message — does not hint at the key value
     throw new WalletError(
       'Infrastructure wallet is not configured. Please set INFRA_WALLET_PRIVATE_KEY.',
       'NOT_CONFIGURED',
@@ -57,7 +56,6 @@ export function getInfraWalletKey(): string {
  * @throws WalletError with 'NOT_CONFIGURED' if the env var is absent or empty.
  */
 export function getAdminDecryptKey(): string {
-  // Delegates to getInfraWalletKey — single source of truth for key retrieval
   return getInfraWalletKey()
 }
 
@@ -68,9 +66,6 @@ export function getAdminDecryptKey(): string {
 /**
  * Write a blob to Walrus using the infrastructure wallet.
  *
- * In MVP, the infrastructure wallet "authorizes" the write via the HTTP call.
- * In production, this would sign the transaction with the wallet keypair.
- *
  * @param data         The content to store.
  * @param contentType  MIME type. Defaults to 'application/octet-stream'.
  * @returns            The Walrus blob ID for the stored data.
@@ -80,14 +75,14 @@ export async function executeWalrusWrite(
   data: Buffer,
   contentType = 'application/octet-stream',
 ): Promise<{ blobId: string }> {
-  // Validate the wallet is configured before attempting the write
   getInfraWalletKey()
 
   try {
     const result = await writeBlob(data, contentType)
     return { blobId: result.blobId }
-  } catch {
-    // Re-throw as WalletError with a safe message — never expose internals
+  } catch (err) {
+    // Log the original error before swallowing — safe: no key material in walrus errors
+    console.error('[WalletManager] executeWalrusWrite failed:', err instanceof Error ? err.message : String(err))
     throw new WalletError(
       'Walrus write operation failed. Please try again.',
       'OPERATION_FAILED',
@@ -103,12 +98,13 @@ export async function executeWalrusWrite(
  * @throws        WalletError with 'OPERATION_FAILED' on failure.
  */
 export async function executeWalrusRead(blobId: string): Promise<Buffer> {
-  // Validate the wallet is configured before attempting the read
   getInfraWalletKey()
 
   try {
     return await readBlob(blobId)
-  } catch {
+  } catch (err) {
+    // Log the original error before swallowing
+    console.error('[WalletManager] executeWalrusRead failed:', err instanceof Error ? err.message : String(err))
     throw new WalletError(
       'Walrus read operation failed. Please try again.',
       'OPERATION_FAILED',
@@ -126,7 +122,7 @@ export async function executeWalrusRead(blobId: string): Promise<Buffer> {
  * SECURITY: The `value` parameter is NEVER logged or included in errors.
  *
  * @param value     The plaintext string to encrypt.
- * @param policyId  The Seal policy ID governing decryption access.
+ * @param policyId  The Seal policy ID / IBE identity governing decryption access.
  * @returns         The base64-encoded encrypted blob and algorithm identifier.
  * @throws          WalletError with 'OPERATION_FAILED' on failure.
  */
@@ -137,14 +133,19 @@ export async function executeSealEncrypt(
   getInfraWalletKey()
 
   try {
-    // SECURITY: `value` is passed directly — never referenced in logs below
+    // SECURITY: `value` is passed directly — never referenced in error messages
     const result = await encrypt(value, policyId)
     return {
       encryptedData: result.encryptedData,
       algorithm: result.algorithm,
     }
-  } catch {
-    // Do NOT include `value` or any derivative in this error message
+  } catch (err) {
+    // Log the original error for diagnostics (safe: no plaintext in seal errors)
+    // SECURITY: do NOT include `value` or any derivative in this log message
+    console.error(
+      '[WalletManager] executeSealEncrypt failed:',
+      err instanceof Error ? err.message : String(err),
+    )
     throw new WalletError(
       'Seal encryption operation failed.',
       'OPERATION_FAILED',
@@ -175,7 +176,11 @@ export async function executeSealDecrypt(
     return { plaintext: result.plaintext }
   } catch (err) {
     if (err instanceof WalletError) throw err
-    // Do NOT include any plaintext hints in this error message
+    // Log the original error before swallowing (safe: no plaintext in seal errors)
+    console.error(
+      '[WalletManager] executeSealDecrypt failed:',
+      err instanceof Error ? err.message : String(err),
+    )
     throw new WalletError(
       'Seal decryption operation failed.',
       'OPERATION_FAILED',
@@ -200,7 +205,11 @@ export async function executeSealCreatePolicy(
   try {
     const policy = await createPolicy(formId, authorizedRoles)
     return { policyId: policy.policyId }
-  } catch {
+  } catch (err) {
+    console.error(
+      '[WalletManager] executeSealCreatePolicy failed:',
+      err instanceof Error ? err.message : String(err),
+    )
     throw new WalletError(
       'Seal policy creation failed.',
       'OPERATION_FAILED',

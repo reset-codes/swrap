@@ -29,10 +29,14 @@ export const SCHEME_ID = SCHEME_ID_V2;
 export const HEADER_SIZE = 166; // Matches CIPHERTEXT_OFFSET_V2
 
 // Seal Testnet Configuration (R7.8)
-export const SEAL_TESTNET_PACKAGE_ID = '0x4016869413374eaa71df2a043d1660ed7bc927ab7962831f8b07efbc7efdb2c3';
+export const SEAL_TESTNET_PACKAGE_ID =
+  '0x4016869413374eaa71df2a043d1660ed7bc927ab7962831f8b07efbc7efdb2c3';
 export const SEAL_TESTNET_SERVER_CONFIGS = [
-  { objectId: '0x73d05d62c18d9374e3ea529e8e0ed6161da1a141a94d3f76ae3fe4e99356db75', weight: 1 },
-  { objectId: '0xf5d14a81a982144ae441cd7d64b09027f116a468bd36e7eca494f750591623c8', weight: 1 },
+  {
+    objectId: '0xb012378c9f3799fb5b1a7083da74a4069e3c3f1c93de0b27212a5799ce1e1e98',
+    aggregatorUrl: 'https://seal-aggregator-testnet.mystenlabs.com',
+    weight: 1,
+  },
 ];
 
 const OWNER_ADDRESS_OFFSET = 2;
@@ -178,7 +182,9 @@ export function decode(bytes: Uint8Array): EncryptedBlob {
   // Version 1 — Legacy
   if (version === VERSION_V1) {
     if (bytes.length < HEADER_SIZE_V1) {
-      throw new ParseError(`buffer too short for v1: expected ${HEADER_SIZE_V1}, got ${bytes.length}`);
+      throw new ParseError(
+        `buffer too short for v1: expected ${HEADER_SIZE_V1}, got ${bytes.length}`,
+      );
     }
     if (schemeId !== SCHEME_ID_V1) {
       throw new ParseError(`unknown scheme_id for v1: 0x${schemeId.toString(16)}`);

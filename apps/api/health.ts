@@ -13,9 +13,8 @@
 
 import { NextResponse } from 'next/server';
 import { loadPocEnv } from '@poc/shared';
-import { detectLocalSigner } from '@poc/sui';
+import { detectLocalSigner, createSuiClient, getBalance } from '@poc/sui';
 import { createWalrusClient } from '@poc/walrus';
-import { createSuiClient, getBalance } from '@poc/sui';
 import { toErrorResponse } from './error-envelope';
 
 // ---------------------------------------------------------------------------
@@ -126,6 +125,9 @@ export async function GET(): Promise<NextResponse<HealthResponse>> {
     signer: signerInfo,
     walrus: walrusInfo,
     sui: suiInfo,
-    seal: { mode: 'fallback' },
+    seal: {
+      mode: 'real',
+      package_id_set: !!env.SUI_POC_PACKAGE_ID,
+    },
   });
 }

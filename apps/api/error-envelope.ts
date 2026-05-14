@@ -18,8 +18,7 @@
 
 import { NextResponse } from 'next/server';
 import { EnvLoadError } from '@poc/shared';
-import { SignerDetectorError } from '@poc/sui';
-import { SuiClientError } from '@poc/sui';
+import { SignerDetectorError, SuiClientError } from '@poc/sui';
 import { WalrusError } from '@poc/walrus';
 
 // ---------------------------------------------------------------------------

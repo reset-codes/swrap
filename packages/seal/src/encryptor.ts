@@ -11,15 +11,10 @@
  */
 
 import { SealClient } from '@mysten/seal';
-import { createSuiClient, type PocSigner } from '@poc/sui';
+import type { PocSigner } from '@poc/sui';
 import { loadPocEnv } from '@poc/shared';
-import {
-  encode,
-  type BlobType,
-  VERSION_V2,
-  SCHEME_ID_V2,
-  SEAL_TESTNET_SERVER_CONFIGS,
-} from './encrypted-blob';
+import { encode, type BlobType, SEAL_TESTNET_SERVER_CONFIGS } from './encrypted-blob';
+import { createSealSuiClient } from './sui-client';
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -41,11 +36,12 @@ export async function encrypt(
   identity?: string,
 ): Promise<Uint8Array> {
   const env = loadPocEnv();
-  const suiClient = createSuiClient(env.SUI_RPC_URL);
+  const suiClient = createSealSuiClient(env.SUI_RPC_URL);
 
   const sealClient = new SealClient({
-    suiClient: suiClient as any, // Cast due to SDK/Internal client mismatch
+    suiClient,
     serverConfigs: SEAL_TESTNET_SERVER_CONFIGS,
+    verifyKeyServers: false,
   });
 
   // Use the POC package ID for authorization (seal_approve is there)
