@@ -1,190 +1,166 @@
-# SEALBASE — Product Roadmap
+# POC to Production Roadmap
+
+> **Scope:** This document describes the migration path from the `walrus-poc` branch proof of concept to a production-ready SEALBASE platform. It is organized into three stages.
+
+---
 
 ## Stage Overview
 
-| Stage | Name | Focus | Status |
-|-------|------|-------|--------|
-| 1 | Foundation | Project setup, auth, DB schema, design system, Walrus/Seal scaffolding | Planned |
-| 2 | Form Builder | Field system, drag/drop, conversational mode, table mode, publishing | Planned |
-| 3 | Storage Pipeline | Uploads, Walrus storage, Seal encryption, storage credits | Planned |
-| 4 | Submission System | Public forms, submission handling, metadata indexing | Planned |
-| 5 | Admin Dashboard | Filters, statuses, viewer, media previews, CSV export, analytics | Planned |
-| 6 | Polish | Landing page, animations, onboarding, empty states, responsive | Planned |
-| 7 | Bonus | Import tools, enhanced analytics, demo prep | Future |
+| Stage | Name | Branch | Status |
+|---|---|---|---|
+| 1 | POC | `walrus-poc` | In progress |
+| 2 | Beta | `main` (new features) | Planned |
+| 3 | Production | `main` (hardened) | Future |
 
 ---
 
-## Stage 1: Foundation
+## Stage 1 — POC (Current)
 
-**Goal**: A working skeleton with auth, database, design system, and infrastructure integrations scaffolded.
+**Goal:** Validate the complete SEALBASE data flow end-to-end on a single developer machine connected to Sui testnet and Walrus testnet.
 
-### Deliverables
-- [ ] Next.js 15 project with TypeScript, TailwindCSS, shadcn/ui
-- [ ] Google OAuth via NextAuth
-- [ ] Prisma schema (index-only tables: forms, submissions, users, credits, blobs)
-- [ ] Design system tokens (colors, typography, spacing, shadows)
-- [ ] Dashboard shell (sidebar, header, navigation)
-- [ ] Walrus SDK integration (client wrapper, blob read/write)
-- [ ] Seal SDK scaffolding (encryption/decryption client)
-- [ ] Infrastructure wallet setup (keypair management)
-- [ ] Storage credit balance model
-- [ ] `/docs` directory with all core documentation
+**What it proves:**
+- Encrypted form schemas and encrypted submissions can be uploaded to Walrus testnet
+- AES-256-GCM encryption (Plan B fallback for Seal SDK) works end-to-end
+- A local Sui signer can connect to Sui testnet, fetch balance, and anchor blob metadata
+- The complete product flow works: Create Form → Encrypt → Upload → Retrieve → Decrypt → Submit → Encrypt Response → Upload Response → Decrypt Response
 
-### Exit Criteria
-- Admin can log in with Google
-- Dashboard shell renders with navigation
-- Walrus client can write and read a test blob
-- Seal client can encrypt and decrypt a test payload
-- Database schema is migrated and seeded
+**What it intentionally skips:**
+- OAuth / NextAuth / sessions — single trusted developer, no auth needed
+- RBAC — "Owner" = active Sui address from local keystore
+- Multi-tenant isolation — no workspace, team, or user tables
+- Billing / storage credits — Walrus testnet publisher pays fees
+- Production infrastructure — no VPS, managed DB, KMS/HSM, queue, CDN
+- PostgreSQL / Prisma — Local_Store is browser-side Zustand + localStorage
+- Real Seal SDK — using AES-256-GCM fallback until `@mysten/seal` stabilizes
 
----
-
-## Stage 2: Form Builder
-
-**Goal**: Admins can create, configure, and publish forms with all supported field types.
-
-### Deliverables
-- [ ] Field type system (short text, long text, rich text, dropdown, multi-select, checkbox, star rating, URL, image upload, video upload, file upload)
-- [ ] Field configuration panel (required, placeholder, help text, validation, encryption toggle)
-- [ ] Drag-and-drop form builder (Table Mode)
-- [ ] Conversational Mode builder (Typeform-style preview)
-- [ ] Form settings (title, description, slug, mode selection)
-- [ ] Form schema serialization to JSON
-- [ ] Form schema storage on Walrus
-- [ ] Form metadata indexing in PostgreSQL
-- [ ] Public URL generation (`sealbase.app/f/[slug]`)
-- [ ] Form versioning (new schema blob on each save)
-
-### Exit Criteria
-- Admin can create a form with multiple field types
-- Form schema is stored on Walrus and indexed locally
-- Public URL is generated and accessible
-- Both Table Mode and Conversational Mode are selectable
+**Exit criteria:**
+- All property tests pass (R17.1–R17.9)
+- `/api/poc/health` returns `ok: true` with `signer_status: "ready"`
+- Full form creation → submission → retrieval flow works on a single machine
+- All five documentation deliverables exist in `docs/`
 
 ---
 
-## Stage 3: Storage Pipeline
+## Stage 2 — Beta
 
-**Goal**: File uploads and submission payloads flow through Walrus correctly. Seal encryption works end-to-end.
+**Goal:** A hosted, multi-user backend with real authentication, storage accounting, and the real Seal SDK.
 
-### Deliverables
-- [ ] File upload API (image, video, generic file → Walrus)
-- [ ] Blob reference tracking (blob_id stored in PostgreSQL)
-- [ ] Seal encryption integration (field-level and full-submission)
-- [ ] Seal policy creation per form
-- [ ] Storage credit check before writes
-- [ ] Storage credit deduction after writes
-- [ ] Infrastructure wallet transaction execution
-- [ ] Storage cost estimation
-- [ ] Admin credit deposit flow (WAL/SUI)
-- [ ] Credit balance display in dashboard
+### What needs to change
 
-### Exit Criteria
-- File upload stores blob on Walrus and returns blob_id
-- Encrypted fields are encrypted via Seal before Walrus storage
-- Storage credits are deducted correctly per write
-- Admin can view remaining credits
+**Authentication and authorization**
+- Replace the `DEV_BYPASS_STORAGE` bypass with real NextAuth sessions
+- Add Google OAuth (or equivalent) as the primary sign-in method
+- Implement RBAC: `owner` role for form creators, `viewer` role for submission readers
+- Add CSRF protection (re-enable NextAuth middleware for all API routes)
+- Remove the `DEV_LOCAL_SIGNER` model — users authenticate via wallet or OAuth, not a local keystore file
 
----
+**Encryption**
+- Replace the Plan B AES-256-GCM fallback with the real `@mysten/seal` SDK
+- The public surface (`encrypt(plaintext, signer, blobType)`, `decrypt(bytes, signer)`) stays identical
+- Plan A blobs use wire-format version `0x02`; Plan B blobs (`0x01`) remain decryptable during migration
+- Seal's threshold decryption model eliminates the single-key risk of the POC
 
-## Stage 4: Submission System
+**Storage and persistence**
+- Replace `localStorage` / Zustand persist with PostgreSQL via Prisma
+- Add proper session management so metadata is tied to authenticated users
+- Implement storage credit accounting: credit balance, deduction per write, deposit flow
+- Add the `DEV_ALLOW_PLAINTEXT=false` enforcement at the infrastructure level (not just a flag)
 
-**Goal**: Public forms accept submissions. Submissions are stored on Walrus and indexed locally.
+**Infrastructure**
+- Deploy to a VPS or managed cloud (Vercel, Railway, Fly.io, etc.)
+- Add a managed PostgreSQL instance
+- Add structured logging and error tracking (Sentry)
+- Add uptime monitoring for Walrus and Sui RPC endpoints
+- Add rate limiting on all write endpoints
 
-### Deliverables
-- [ ] Public form renderer (`/f/[slug]`)
-- [ ] Conversational Mode submission UI (animated, one question at a time)
-- [ ] Table Mode submission UI (compact, all fields visible)
-- [ ] Client-side form validation
-- [ ] Submission assembly (payload JSON with blob refs)
-- [ ] Submission storage on Walrus (canonical submission blob)
-- [ ] Submission metadata indexing in PostgreSQL
-- [ ] Append-only submission model (no updates, only status layers)
-- [ ] Anonymous submitter model (no account required)
-- [ ] Success state after submission
+**Multi-tenant isolation**
+- Add workspace / team model
+- Scope all form and submission queries to the authenticated user's workspace
+- Add user invitation flow
 
-### Exit Criteria
-- Anyone with a public URL can submit a form
-- Submission is stored on Walrus with a canonical blob ID
-- Submission metadata is indexed in PostgreSQL
-- No wallet or account required for submitters
+**API hardening**
+- Add request size limits
+- Add input sanitization
+- Add proper HTTP caching headers
+- Add API versioning (`/api/v1/`)
 
----
+### What stays the same
 
-## Stage 5: Admin Dashboard
-
-**Goal**: Admins can view, filter, search, and manage all submissions.
-
-### Deliverables
-- [ ] Submissions list view (table with filters, search, sort)
-- [ ] Status tag system (open, under review, planned, resolved, rejected)
-- [ ] Status update flow (append-only status layer)
-- [ ] Submission detail view (full payload, field values, media previews)
-- [ ] Walrus blob reference display (blob IDs, links)
-- [ ] Encryption indicator (shows which fields are encrypted)
-- [ ] Decrypt-on-demand (admin decrypts via Seal in-memory)
-- [ ] Media preview (images, videos inline)
-- [ ] CSV export (metadata + decrypted values if authorized)
-- [ ] Storage analytics (per-form usage, total spend, credit history)
-- [ ] Forms list with submission counts
-
-### Exit Criteria
-- Admin can view all submissions for their forms
-- Status tags can be applied and updated
-- Encrypted fields show decrypt button; decryption works
-- CSV export downloads correctly
-- Storage analytics show accurate data
+- The `packages/seal`, `packages/walrus`, `packages/sui`, `packages/shared` package structure
+- The tsconfig path aliases (`@poc/shared`, `@poc/seal`, etc.)
+- The wire format for encrypted blobs (version `0x01` for Plan B, `0x02` for Plan A)
+- The Move package for Sui metadata anchoring (may need upgrade path added)
+- The design system tokens and UI primitives
 
 ---
 
-## Stage 6: Polish
+## Stage 3 — Production
 
-**Goal**: The product feels like a real startup product. Every screen is intentional.
+**Goal:** A hardened, scalable, production-grade platform suitable for real users and real data.
 
-### Deliverables
-- [ ] Landing page (hero, features, how it works, CTA)
-- [ ] Onboarding flow (first form creation wizard)
-- [ ] Loading states (skeleton screens, spinners)
-- [ ] Empty states (no forms, no submissions, no credits)
-- [ ] Error states (failed uploads, insufficient credits, network errors)
-- [ ] Responsive design (mobile-friendly public forms, tablet dashboard)
-- [ ] Framer Motion animations (page transitions, form field animations)
-- [ ] Conversational Mode polish (smooth transitions, progress indicator)
-- [ ] Toast notifications (success, error, info)
-- [ ] Keyboard navigation and accessibility audit
+### What needs to change from Stage 2
 
-### Exit Criteria
-- Landing page is live and converts visitors to sign-ups
-- All screens have proper loading, empty, and error states
-- Public forms work well on mobile
-- Animations feel smooth and intentional
+**Key management**
+- Replace any remaining local key material with KMS-managed keys (AWS KMS, Google Cloud KMS, or HashiCorp Vault)
+- Enable automatic key rotation
+- Implement key escrow for recovery scenarios
+- Separate signing keys (Sui transactions) from encryption keys (Seal)
+
+**Scalability**
+- Add a message queue for async Walrus uploads and Sui anchoring (avoid blocking HTTP requests on slow testnet operations)
+- Add a distributed job system for retry logic
+- Add a CDN for static assets
+- Add horizontal scaling for the Next.js server
+
+**Observability**
+- Add distributed tracing (OpenTelemetry)
+- Add metrics and dashboards (Prometheus + Grafana, or Datadog)
+- Add alerting on failed anchoring transactions, high error rates, and low storage credits
+- Add audit logging for all form and submission operations
+
+**Sui mainnet migration**
+- Migrate from Sui testnet to Sui mainnet
+- Migrate from Walrus testnet to Walrus mainnet
+- Update the Move package with an upgrade path (the POC Move module has no upgrade capability)
+- Fund the infrastructure wallet with real SUI for gas
+
+**Compliance and security hardening**
+- Add penetration testing
+- Add a security audit of the Seal integration
+- Add data retention policies
+- Add GDPR compliance tooling (data export, deletion)
+- Add SOC 2 controls if required by customers
+
+**Monitoring and incident response**
+- Add on-call rotation
+- Add runbooks for common failure modes (Walrus publisher down, Sui RPC timeout, key rotation)
+- Add automated rollback procedures
 
 ---
 
-## Stage 7: Bonus (Future)
+## Migration Notes
 
-**Goal**: Ecosystem integrations and enhanced capabilities.
+### Local_Store → PostgreSQL
 
-### Deliverables
-- [ ] Import from Typeform (JSON schema mapping)
-- [ ] Import from Google Forms (JSON schema mapping)
-- [ ] Import from Airtable (base schema mapping)
-- [ ] Enhanced analytics (response rates, completion rates, field-level stats)
-- [ ] Demo mode (pre-populated demo workspace)
-- [ ] Embeddable widget (iframe or JS embed for external sites)
-- [ ] Webhook support (notify external services on submission)
+The POC's `localStorage` / Zustand persist store (`sealbase-poc@1`) is not migrated to PostgreSQL automatically. Stage 2 starts with a fresh database. Developers who want to preserve their POC data should export blob IDs before switching to Stage 2.
+
+### Plan B → Plan A encryption
+
+Blobs encrypted with the Plan B AES-256-GCM scheme (wire-format version `0x01`) remain decryptable after the Plan A migration. The `decrypt()` function checks the version byte and routes to the appropriate decryption path. No re-encryption of existing blobs is required.
+
+### Sui testnet → mainnet
+
+The POC Move package (`sealbase_poc::metadata`) is published on Sui testnet. The mainnet deployment requires a new `sui client publish` with a funded mainnet wallet. The `SUI_POC_PACKAGE_ID` environment variable must be updated to the mainnet package ID.
+
+### Branch strategy
+
+The `walrus-poc` branch is a fork of `v0-baseline`. It is not merged into `main`. Stage 2 work begins on `main` as new features, informed by the POC's learnings but not constrained by its code structure.
 
 ---
 
-## What We Are NOT Building
+## Related Documents
 
-These are explicitly out of scope and should not be added without a product decision:
-
-- Realtime collaboration on forms
-- Token systems or tokenomics
-- DAO governance
-- Complex smart contracts
-- Notification systems (email, push)
-- Automation engines or workflows
-- AI-powered form generation (future consideration only)
-- Multi-language i18n (future consideration only)
+- `docs/security.md` — trust assumptions and hardening checklist
+- `docs/dev-mode.md` — environment flags (Stage 1 only)
+- `docs/walrus-flow.md` — data flow diagrams
+- `docs/ARCHITECTURE.md` — POC system architecture

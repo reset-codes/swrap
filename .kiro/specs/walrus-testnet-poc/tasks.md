@@ -367,7 +367,7 @@ This plan implements the Walrus Testnet POC on branch `walrus-poc` (forked from 
     - Ensure all tests pass, ask the user if questions arise.
     - _Requirements: R12.3, R16.1, R16.3_
 
-- [ ] 7. Phase 6 — Sui metadata anchoring
+- [x] 7. Phase 6 — Sui metadata anchoring
   - [x] 7.1 Author the Move package `packages/sui/move/sealbase_poc/`
     - `Move.toml` with `edition = "2024.beta"` and the Sui framework dep from design.md.
     - `sources/metadata.move` with `MetadataRecord`, `MetadataAnchored` event, `anchor_record` entry function, error constants `EInvalidRecordType / EInvalidBlobId / EInvalidSchemaHash`.
@@ -409,45 +409,45 @@ This plan implements the Walrus Testnet POC on branch `walrus-poc` (forked from 
     - **Validates: Requirements R13.2, R17.7**
     - _Requirements: R13.2, R17.7_
 
-  - [-] 7.8 Phase 6 checkpoint and commit
+  - [x] 7.8 Phase 6 checkpoint and commit
     - Run `scripts/phase-verify.sh --probe /api/poc/metadata/[active_address]`.
     - Commit: `feat: anchor walrus blob metadata on sui testnet`.
     - Ensure all tests pass, ask the user if questions arise.
     - _Requirements: R13.1, R13.3, R16.1, R16.3_
 
 - [ ] 8. Phase 7 — Documentation deliverables + completion check
-  - [ ] 8.1 Write `docs/architecture.md`
+  - [x] 8.1 Write `docs/architecture.md`
     - Sections: system overview, trust assumptions, Local_Signer model, encryption lifecycle, Walrus upload lifecycle, Sui metadata lifecycle.
     - Include the component + deployment diagram from design.md.
     - _Requirements: R15.1_
 
-  - [ ] 8.2 Write `docs/dev-mode.md`
+  - [x] 8.2 Write `docs/dev-mode.md`
     - Document each of the five POC flags (`DEV_BYPASS_STORAGE`, `DEV_LOCAL_SIGNER`, `DEV_ALLOW_PLAINTEXT`, `USE_WALRUS_TESTNET`, `USE_SUI_TESTNET`), default values, and the security implications of flipping each.
     - _Requirements: R15.2_
 
-  - [ ] 8.3 Write `docs/security.md`
+  - [x] 8.3 Write `docs/security.md`
     - POC trust assumptions (local machine is trusted), Local_Signer risks (plaintext keystore file on disk, no HSM), migration path to Stage 2/3 (KMS, multi-tenant, policy-based Seal).
     - _Requirements: R15.3_
 
-  - [ ] 8.4 Write `docs/walrus-flow.md`
+  - [x] 8.4 Write `docs/walrus-flow.md`
     - Step-by-step flow for form creation (canonicalize → hash → encrypt → upload → anchor) and submission; include a sequence diagram per flow.
     - _Requirements: R15.4_
 
-  - [ ] 8.5 Write `docs/roadmap.md`
+  - [x] 8.5 Write `docs/roadmap.md`
     - Stage 1 (POC), Stage 2 (Beta — hosted backend, auth, rate limiting, storage accounting), Stage 3 (Production — KMS/HSM, monitoring, tenant isolation, queues).
     - _Requirements: R15.5_
 
-  - [ ] 8.6 Write `docs/design-system.md`
+  - [x] 8.6 Write `docs/design-system.md`
     - Exactly six top-level `##` headings: `Visual Philosophy`, `Spacing System`, `Component Rules`, `Interaction Philosophy`, `Animation Constraints`, `Accessibility Requirements`.
     - Each section non-empty; link back to `packages/shared/src/design-tokens.ts` as the executable source of truth.
     - _Requirements: R15.6, R19.14_
 
-  - [ ] 8.7 Implement `scripts/completion-check.ts`
+  - [x] 8.7 Implement `scripts/completion-check.ts`
     - Script verifies: every `docs/*.md` file from R15.1–R15.6 exists and is non-empty; `docs/design-system.md` has exactly the six required headings; all nine R17 property tests are referenced by name under `packages/**/*.pbt.test.ts` and `apps/api/**/*.pbt.test.ts`; `git merge-base --is-ancestor v0-baseline HEAD` returns 0; `npm run lint:ui` exits 0 (R19.16).
     - Add `npm run check:completion` script invoking it.
     - _Requirements: R15.7, R16.5, R19.14, R19.16_
 
-  - [ ] 8.8 Final phase checkpoint and commit
+  - [-] 8.8 Final phase checkpoint and commit
     - Run `scripts/phase-verify.sh` and `npm run check:completion` — both must be green.
     - Commit: `feat: add poc documentation and completion check`.
     - Ensure all tests pass, ask the user if questions arise.

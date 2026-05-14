@@ -14,7 +14,8 @@
     "type-check": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
-    "test:pbt": "vitest run --dir packages --reporter=verbose"
+    "test:pbt": "vitest run --dir packages --reporter=verbose",
+    "completion-check": "npx ts-node --project tsconfig.scripts.json -r tsconfig-paths/register scripts/completion-check.ts"
   },
   "prisma": {
     "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
