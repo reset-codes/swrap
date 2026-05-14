@@ -7,7 +7,6 @@
  * Requirements: R9.3, R9.6, R9.7, R10.1, R10.2, R12.2
  */
 
-import { createHash } from 'node:crypto';
 import { canonicalize } from './pretty-printer';
 import {
   FormSchemaSchema,
@@ -108,10 +107,10 @@ export function parseSubmission(bytes: Uint8Array): Submission {
  *
  * Requirements: R12.2
  */
-export function validateSubmissionAgainstForm(
+export async function validateSubmissionAgainstForm(
   submission: Submission,
   form: FormSchema,
-): void {
+): Promise<void> {
   const issues: string[] = [];
 
   // Build a map of field label → field for quick lookup
@@ -139,7 +138,14 @@ export function validateSubmissionAgainstForm(
 
   // 3. Check form_schema_hash equals recomputed hash of the canonical form bytes
   const canonicalBytes = canonicalize(form);
-  const recomputedHash = createHash('sha256').update(canonicalBytes).digest('hex');
+  // Use Web Crypto API (browser + Node.js 18+) to avoid bundling node:crypto.
+  // Copy into a fresh ArrayBuffer to satisfy the strict BufferSource type.
+  const plainBuffer = new ArrayBuffer(canonicalBytes.byteLength);
+  new Uint8Array(plainBuffer).set(canonicalBytes);
+  const hashBuffer = await globalThis.crypto.subtle.digest('SHA-256', plainBuffer);
+  const recomputedHash = Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
 
   if (submission.form_schema_hash !== recomputedHash) {
     issues.push(

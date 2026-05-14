@@ -20,10 +20,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   loadPocEnv,
   canonicalize,
-  schemaHashHex,
   FormSchemaSchema,
   parseFormSchema,
 } from '@poc/shared';
+import { schemaHashHexSync } from '@poc/shared/schema-hash-server';
 import { encrypt, decrypt, looksLikeEncryptedBlob } from '@poc/seal';
 import { detectLocalSigner } from '@poc/sui';
 import { createWalrusClient } from '@poc/walrus';
@@ -149,7 +149,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   // 6. Compute schema_hash from canonical bytes
-  const schema_hash = schemaHashHex(parseResult.data);
+  const schema_hash = schemaHashHexSync(parseResult.data);
 
   // 7. Detect local signer
   let signerResult: Awaited<ReturnType<typeof detectLocalSigner>>;
@@ -310,7 +310,7 @@ export async function GET(
   }
 
   // 8. Compute schema_hash from the decrypted bytes
-  const schema_hash = schemaHashHex(formSchema);
+  const schema_hash = schemaHashHexSync(formSchema);
 
   // 9. Return form_schema, blob_id, schema_hash
   return NextResponse.json(

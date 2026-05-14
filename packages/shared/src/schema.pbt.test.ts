@@ -18,7 +18,7 @@ import { describe, it, expect } from 'vitest';
 import * as fc from 'fast-check';
 import { canonicalize } from './pretty-printer';
 import { parseFormSchema, parseSubmission } from './parser';
-import { schemaHashHex } from './schema-hash';
+import { schemaHashHexSync } from './schema-hash-server';
 import { FIELD_TYPES } from './validator';
 import type { PocField, FormSchema, Submission } from './validator';
 
@@ -122,7 +122,7 @@ function submissionArb(form: FormSchema): fc.Arbitrary<Submission> {
 
   return fc.record({
     form_blob_id: nonEmptyStringArb(100),
-    form_schema_hash: fc.constant(schemaHashHex(form)),
+    form_schema_hash: fc.constant(schemaHashHexSync(form)),
     answers: form.fields.length > 0 ? answersArb : fc.constant({}),
     submitted_at: isoDateArb,
   });

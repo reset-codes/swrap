@@ -174,7 +174,7 @@ This plan implements the Walrus Testnet POC on branch `walrus-poc` (forked from 
     - Ensure all tests pass, ask the user if questions arise.
     - _Requirements: R6.1, R6.5, R16.1, R16.3_
 
-- [ ] 4. Phase 3 — Seal encryption + encrypted round-trip
+- [x] 4. Phase 3 — Seal encryption + encrypted round-trip
   - [x] 4.1 Implement `packages/shared/src/pretty-printer.ts` (RFC 8785 JCS)
     - Export `canonicalize(value): Uint8Array` and `canonicalizeToString(value): string`.
     - Depend on an existing JCS library (`@truestamp/canonify` or equivalent) if stable; otherwise implement per RFC 8785 §3 directly (≈80 LOC).
@@ -232,14 +232,14 @@ This plan implements the Walrus Testnet POC on branch `walrus-poc` (forked from 
     - **Validates: Requirements R8.4, R17.5**
     - _Requirements: R8.4, R17.5_
 
-  - [-] 4.10 Phase 3 checkpoint and commit
+  - [x] 4.10 Phase 3 checkpoint and commit
     - Run `scripts/phase-verify.sh --probe /api/poc/forms`.
     - Commit: `feat: implement encrypted blob uploads`.
     - Ensure all tests pass, ask the user if questions arise.
     - _Requirements: R7.3, R8.1, R8.4, R16.1, R16.3_
 
 - [ ] 5. Phase 4 — Form creation UI + Local_Store (Form_Builder_UI)
-  - [ ] 5.1 Implement `apps/web/stores/local-store.ts` (Zustand + persist)
+  - [x] 5.1 Implement `apps/web/stores/local-store.ts` (Zustand + persist)
     - Zustand store with persist middleware, key `sealbase-poc@1`, `partialize` excludes `scratch`.
     - State shape: `{ version: 1, forms: Record<blob_id, PersistedFormEntry>, submissions: Record<blob_id, PersistedSubmissionEntry>, scratch? }`.
     - `ForbiddenKey` type check + compile-time assertion that `PersistedFormEntry` / `PersistedSubmissionEntry` contain none of `plaintext | plainText | secret | privateKey | keystore | signer`.
@@ -248,46 +248,46 @@ This plan implements the Walrus Testnet POC on branch `walrus-poc` (forked from 
     - Skip entries that fail structural validation on load (R11.7).
     - _Requirements: R11.1, R11.2, R11.3, R11.4, R11.5, R11.6, R11.7_
 
-  - [ ] 5.2 Unit tests for Local_Store invariants
+  - [x] 5.2 Unit tests for Local_Store invariants
     - Round-trip persist → reload returns same entries.
     - Quota-exceeded mock → store surfaces error flag, does not mark form persisted.
     - Corrupt entry on load is skipped; valid entries still load.
     - Type-level test: attempting to add a `plaintext` field to `PersistedFormEntry` fails compilation (documented as a `// @ts-expect-error` fixture file).
     - _Requirements: R11.3, R11.6, R11.7_
 
-  - [ ] 5.3 Implement `apps/web/copy/ux-copy.ts`
+  - [x] 5.3 Implement `apps/web/copy/ux-copy.ts`
     - Export the exact `uxCopy` object from design.md §"UX_State" (save, fetch, submit stages).
     - All user-visible strings in Phase 4/5 surfaces MUST come from here.
     - _Requirements: R19.8_
 
-  - [ ] 5.4 Implement UI_Primitives set in `apps/web/components/ui/`
+  - [x] 5.4 Implement UI_Primitives set in `apps/web/components/ui/`
     - Create every primitive listed in design.md §"UI_Primitives set": `Button`, `Input`, `Textarea`, `Card`, `Modal` (Radix Dialog), `Dropdown` (Radix DropdownMenu), `Badge`, `Tabs` (Radix Tabs), `Toast` (sonner-based), `EmptyState`, `LoadingState`, `FormField`.
     - Each uses `class-variance-authority` with the variant contract shown in design.md (Button template).
     - `index.ts` barrel export.
     - _Requirements: R19.5, R19.6_
 
-  - [ ] 5.5 Primitive inventory test + focus-visible snapshot tests
+  - [x] 5.5 Primitive inventory test + focus-visible snapshot tests
     - `apps/web/components/ui/primitives.inventory.test.ts`: assert each required primitive exists and exposes a `cva` variant map (runtime duck-type check).
     - Snapshot tests for `Button`, `Input`, `Textarea`, `Dropdown`, `Modal`, `Tabs`, `FormField` under `:focus-visible` — pinned to the exact `focusRing.outline` computed style from Design_Tokens.
     - _Requirements: R19.5, R19.15_
 
-  - [ ] 5.6 WCAG contrast CI check
+  - [x] 5.6 WCAG contrast CI check
     - `scripts/check-contrast.ts` imports `@poc/shared` tokens and uses `wcag-contrast` to assert: `text.primary / bg.app ≥ 7:1`, `text.secondary / bg.app ≥ 4.5:1`, `accent.base / bg.app ≥ 4.5:1`, plus dark-mode counterparts.
     - Add `npm run check:contrast` script; wire into `npm run lint:ui` composite.
     - _Requirements: R19.15_
 
-  - [ ] 5.7 Implement `apps/web/components/layout/AppShell.tsx` + header
+  - [x] 5.7 Implement `apps/web/components/layout/AppShell.tsx` + header
     - `AppShell` wraps children with the Design_Tokens-driven theme, loads `appFont` (Inter) from `apps/web/fonts.ts`, and rewrites `motion.primitives.*` classes to `transition-none` when `prefers-reduced-motion: reduce`.
     - `PocHeader`, `PocSidebar`, `PageHeader`, `ContentFrame` as passive layout components.
     - _Requirements: R19.1, R19.3, R19.11_
 
-  - [ ] 5.8 Implement Form_Builder_UI components
+  - [x] 5.8 Implement Form_Builder_UI components
     - `apps/web/components/forms/`: `FormTitleInput`, `FieldRow`, `FieldTypePicker`, `FieldEditor`, `AddFieldButton` (opens `Dropdown` seeded from `FIELD_TYPES`), `ValidationSummary`.
     - Reorder via up/down chevron `Button`s only — no `@dnd-kit` imports (R19.9 enforced by `no-restricted-imports`).
     - `apps/web/components/walrus/UploadStatusPill.tsx` renders the four save stages via `uxCopy.save`.
     - _Requirements: R10.1, R10.2, R19.9, R19.6_
 
-  - [ ] 5.9 Implement `apps/web/pages/FormBuilderPage.tsx` and page wrapper
+  - [x] 5.9 Implement `apps/web/pages/FormBuilderPage.tsx` and page wrapper
     - Page orchestrates `SaveState` union (idle/loading per-stage/success/error/empty) and renders the five UX_State primitives explicitly (R19.7).
     - On save: validate → POST `/api/poc/forms` → on 200 `upsertForm` in Local_Store → navigate to preview.
     - On validation failure: show field-level errors via `ValidationSummary`, preserve all entered data (R10.7, R10.8).
@@ -295,7 +295,7 @@ This plan implements the Walrus Testnet POC on branch `walrus-poc` (forked from 
     - Thin Next wrapper `src/app/poc/forms/new/page.tsx` renders `<FormBuilderPage />`.
     - _Requirements: R10.3, R10.4, R10.7, R10.8, R19.7, R19.8_
 
-  - [ ] 5.10 Implement `apps/web/pages/StatusDashboardPage.tsx` + forms list
+  - [x] 5.10 Implement `apps/web/pages/StatusDashboardPage.tsx` + forms list
     - Render `DASHBOARD_COLUMNS = ['Form Name', 'Submissions', 'Encryption', 'Upload', 'Blob Ref', 'Last Activity'] as const` in exactly that order (R19.10).
     - List is fed by Local_Store `forms`, sorted by `created_at` descending.
     - Empty state via `EmptyState` with a `Create form` button.
@@ -303,23 +303,23 @@ This plan implements the Walrus Testnet POC on branch `walrus-poc` (forked from 
     - Thin wrapper at `src/app/poc/page.tsx`.
     - _Requirements: R10.5, R19.10_
 
-  - [ ] 5.11 Snapshot test for dashboard column order
+  - [x] 5.11 Snapshot test for dashboard column order
     - Render `StatusDashboardPage` with a fixture store, snapshot the `<thead>` text nodes, assert it matches `DASHBOARD_COLUMNS` verbatim.
     - _Requirements: R19.10_
 
-  - [ ] 5.12 Implement `FormPreviewPage` (open form by Blob_ID)
+  - [x] 5.12 Implement `FormPreviewPage` (open form by Blob_ID)
     - Page fetches `GET /api/poc/forms/[blob_id]`, handles `FetchState` union (idle/loading/success/error), renders parsed schema via the same FormField primitives (read-only).
     - On retrieval / decryption failure, show stage-labeled error — do not render partial schema (R10.9).
     - `BlobReferenceChip` on the header (monospace, click-to-copy).
     - Thin wrapper at `src/app/poc/forms/[blob_id]/page.tsx`.
     - _Requirements: R10.6, R10.9, R19.7, R19.8_
 
-  - [ ] 5.13 Upgrade ESLint `lint:ui` composite
+  - [x] 5.13 Upgrade ESLint `lint:ui` composite
     - `npm run lint:ui` = `lint` + `check:contrast` + a grep check that no file outside `apps/web/fonts.ts` imports from `next/font/google` or declares a `@font-face` rule.
     - Add a grep check that no file under `apps/web/components/forms/**` imports from `@dnd-kit/*` or `react-beautiful-dnd`.
     - _Requirements: R19.3, R19.6, R19.9, R19.16_
 
-  - [ ] 5.14 Phase 4 checkpoint and commit
+  - [-] 5.14 Phase 4 checkpoint and commit
     - Run `scripts/phase-verify.sh --probe /poc --probe /poc/forms/new --probe /api/poc/forms`.
     - Commit: `feat: add form builder UI and local persistence`.
     - Ensure all tests pass, ask the user if questions arise.

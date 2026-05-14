@@ -94,10 +94,15 @@ export const color = {
     inverse: 'hsl(0 0% 100%)',
   },
   accent: {
-    // Single blue accent — used sparingly for focus, primary CTAs, and links
-    base: 'hsl(217 91% 60%)',
-    hover: 'hsl(217 91% 54%)',
-    active: 'hsl(217 91% 48%)',
+    // Blue accent — used sparingly for focus, primary CTAs, and links.
+    // base is the light-mode value (50% L → 5.07:1 on white, WCAG AA).
+    // baseDark is the dark-mode value (60% L → 4.98:1 on dark canvas, WCAG AA).
+    base: 'hsl(217 91% 50%)',
+    baseDark: 'hsl(217 91% 60%)',
+    hover: 'hsl(217 91% 44%)',
+    hoverDark: 'hsl(217 91% 54%)',
+    active: 'hsl(217 91% 38%)',
+    activeDark: 'hsl(217 91% 48%)',
     subtle: 'hsl(217 91% 97%)', // background tint for selected rows
     subtleDark: 'hsl(217 91% 18%)',
   },
