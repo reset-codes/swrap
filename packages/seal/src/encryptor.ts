@@ -10,61 +10,66 @@
  * Requirements: R7.1, R7.2, R7.4, R7.5, R7.6
  */
 
-import { randomBytes, createCipheriv } from 'node:crypto';
-import { encode, type BlobType } from './encrypted-blob';
-import type { PocSigner } from '@poc/sui';
-
-// ---------------------------------------------------------------------------
-// Startup warning — emitted once at module load time (R7.6)
-// ---------------------------------------------------------------------------
-
-// eslint-disable-next-line no-console
-console.warn('Seal fallback mode active — NOT real Seal');
+import { SealClient } from '@mysten/seal';
+import { createSuiClient, type PocSigner } from '@poc/sui';
+import { loadPocEnv } from '@poc/shared';
+import {
+  encode,
+  type BlobType,
+  VERSION_V2,
+  SCHEME_ID_V2,
+  SEAL_TESTNET_SERVER_CONFIGS,
+} from './encrypted-blob';
 
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
 /**
- * Encrypt `plaintext` using AES-256-GCM with a key derived via HKDF-SHA-256
- * from the signer's secret. The derivation info encodes the blob type and
- * owner address so that keys are domain-separated per (owner, blobType) pair.
- *
- * Returns the wire-format encoded blob (header + ciphertext).
+ * Encrypt `plaintext` using the official @mysten/seal SDK.
+ * The resulting blob uses wire-format version 0x02.
  *
  * @param plaintext  Raw bytes to encrypt.
- * @param signer     Local POC signer (provides address + deriveSymmetricKey).
+ * @param signer     Local POC signer (provides address).
  * @param blobType   'form' | 'subm' — encoded into the wire header.
+ * @param identity   Optional Seal IBE identity string (defaults to signer.address).
  */
 export async function encrypt(
   plaintext: Uint8Array,
   signer: PocSigner,
   blobType: BlobType,
+  identity?: string,
 ): Promise<Uint8Array> {
-  const salt = randomBytes(16);
-  const nonce = randomBytes(12);
+  const env = loadPocEnv();
+  const suiClient = createSuiClient(env.SUI_RPC_URL);
 
-  // info = "sealbase-poc-v1|<blobType>|<ownerAddress>"
-  const info = new TextEncoder().encode(`sealbase-poc-v1|${blobType}|${signer.address}`);
+  const sealClient = new SealClient({
+    suiClient: suiClient as any, // Cast due to SDK/Internal client mismatch
+    serverConfigs: SEAL_TESTNET_SERVER_CONFIGS,
+  });
 
-  // Derive 32-byte AES key via HKDF-SHA-256
-  const key = signer.deriveSymmetricKey(new Uint8Array(salt), info); // 32 bytes
+  // Use the POC package ID for authorization (seal_approve is there)
+  if (!env.SUI_POC_PACKAGE_ID) {
+    throw new Error('SUI_POC_PACKAGE_ID is required for Seal encryption');
+  }
 
-  // AES-256-GCM encrypt
-  const cipher = createCipheriv('aes-256-gcm', key, nonce);
-  const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
-  const tag = cipher.getAuthTag(); // 16 bytes
+  const finalIdentity = identity ?? signer.address;
+
+  const { encryptedObject } = await sealClient.encrypt({
+    packageId: env.SUI_POC_PACKAGE_ID,
+    id: finalIdentity,
+    data: plaintext,
+    threshold: 1, // For POC, threshold 1 is sufficient
+  });
 
   return encode({
     header: {
-      version: 1,
-      schemeId: 1,
+      version: 2,
+      schemeId: 2,
       ownerAddress: signer.address,
-      salt: new Uint8Array(salt),
-      nonce: new Uint8Array(nonce),
-      tag: new Uint8Array(tag),
+      identity: finalIdentity,
       blobType,
     },
-    ciphertext: new Uint8Array(ciphertext),
+    ciphertext: encryptedObject,
   });
 }

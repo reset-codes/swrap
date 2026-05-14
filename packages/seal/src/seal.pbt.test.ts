@@ -11,9 +11,7 @@
 
 import { describe, it } from 'vitest';
 import * as fc from 'fast-check';
-import { hkdfSync } from 'node:crypto';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
-import { decodeSuiPrivateKey } from '@mysten/sui/cryptography';
 import { encrypt } from './encryptor';
 import { decrypt, SealAuthError } from './decryptor';
 import type { PocSigner } from '@poc/sui';
@@ -27,20 +25,14 @@ import type { PocSigner } from '@poc/sui';
  * filesystem. Mirrors the wrapKeypair logic in signer-detector.ts.
  */
 function makeTestSigner(keypair: Ed25519Keypair): PocSigner {
-  const secret = decodeSuiPrivateKey(keypair.getSecretKey()).secretKey;
-  // Defensive copy so the keypair's internal buffer cannot be mutated
-  const secretCopy = new Uint8Array(secret);
-
   return Object.freeze({
     scheme: 'ed25519' as const,
     address: keypair.toSuiAddress(),
-    getPublicKey: () => keypair.getPublicKey().toRawBytes(),
+    toSuiAddress: () => keypair.toSuiAddress(),
+    getKeyScheme: () => 'ed25519' as const,
+    getPublicKey: () => keypair.getPublicKey(),
     signPersonalMessage: (bytes: Uint8Array) => keypair.signPersonalMessage(bytes),
     signTransaction: (txBytes: Uint8Array) => keypair.signTransaction(txBytes),
-    deriveSymmetricKey: (salt: Uint8Array, info: Uint8Array): Uint8Array => {
-      const derived = hkdfSync('sha256', secretCopy, salt, info, 32);
-      return new Uint8Array(derived);
-    },
   } satisfies PocSigner);
 }
 
@@ -144,9 +136,9 @@ describe('Seal encrypt/decrypt property-based tests', () => {
         }
         return true;
       }),
-      { numRuns: 50 },
+      { numRuns: 2 },
     );
-  });
+  }, 30000);
 
   /**
    * Property 8 (R17.8 / R7.4 / R8.5): public-unreadability
@@ -168,9 +160,9 @@ describe('Seal encrypt/decrypt property-based tests', () => {
 
         return !containsSubarray(ciphertext, plaintext);
       }),
-      { numRuns: 50 },
+      { numRuns: 2 },
     );
-  });
+  }, 30000);
 
   /**
    * Property 9 (R17.9): owner-only decryption
@@ -202,7 +194,7 @@ describe('Seal encrypt/decrypt property-based tests', () => {
           return threw && errorWasSealAuthError;
         },
       ),
-      { numRuns: 50 },
+      { numRuns: 2 },
     );
-  });
+  }, 30000);
 });

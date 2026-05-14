@@ -78,4 +78,12 @@ module sealbase_poc::metadata {
         });
         transfer::public_transfer(record, owner);
     }
+
+    /// Seal_Approve (R7.8) — decentralized access control logic.
+    /// Key servers execute this function via dry_run to authorize decryption.
+    /// For the POC, we approve any request that reaches this function.
+    public entry fun seal_approve(_id: vector<u8>) {
+        // Success = approved. In production, this would check `_id` against
+        // on-chain MetadataRecord ownership or an ACL.
+    }
 }

@@ -6,7 +6,6 @@
  */
 
 import { readFile } from 'node:fs/promises';
-import { hkdfSync } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import yaml from 'js-yaml';
@@ -24,7 +23,9 @@ export type SignerScheme = 'ed25519' | 'secp256k1' | 'secp256r1';
 export interface PocSigner {
   readonly scheme: SignerScheme;
   readonly address: string; // 0x-prefixed 32-byte hex
-  getPublicKey(): Uint8Array; // raw 32 bytes (ed25519) or 33 bytes (compressed secp)
+  toSuiAddress(): string;
+  getKeyScheme(): SignerScheme;
+  getPublicKey(): { toRawBytes(): Uint8Array; toSuiAddress(): string };
   signPersonalMessage(bytes: Uint8Array): Promise<{ signature: string; bytes: string }>;
   /**
    * Sign pre-built transaction bytes (BCS-encoded).
@@ -32,8 +33,6 @@ export interface PocSigner {
    * `tx.build({ client })` to obtain the bytes before passing them here.
    */
   signTransaction(txBytes: Uint8Array): Promise<{ signature: string; bytes: string }>;
-  /** Seal-only: derive a 32-byte symmetric key from the secret + salt/info (HKDF-SHA-256). */
-  deriveSymmetricKey(salt: Uint8Array, info: Uint8Array): Uint8Array;
 }
 
 export interface SignerDetectorResult {
@@ -225,24 +224,11 @@ function wrapKeypair(kp: AnyKeypair, scheme: SignerScheme, rawSecretBytes?: Uint
   return Object.freeze({
     scheme,
     address: kp.toSuiAddress(),
-    getPublicKey: (): Uint8Array => kp.getPublicKey().toRawBytes(),
+    toSuiAddress: () => kp.toSuiAddress(),
+    getKeyScheme: () => scheme,
+    getPublicKey: () => kp.getPublicKey(),
     signPersonalMessage: (bytes: Uint8Array) => kp.signPersonalMessage(bytes),
     signTransaction: (txBytes: Uint8Array) => kp.signTransaction(txBytes),
-    deriveSymmetricKey: (salt: Uint8Array, info: Uint8Array): Uint8Array =>
-      hkdfSha256(secret, salt, info, 32),
   } satisfies PocSigner);
 }
 
-/**
- * HKDF-SHA-256 using Node's built-in `crypto.hkdfSync` (available in Node 15+).
- * Returns `length` bytes of derived key material.
- */
-function hkdfSha256(
-  ikm: Uint8Array,
-  salt: Uint8Array,
-  info: Uint8Array,
-  length: number,
-): Uint8Array {
-  const derived = hkdfSync('sha256', ikm, salt, info, length);
-  return new Uint8Array(derived);
-}

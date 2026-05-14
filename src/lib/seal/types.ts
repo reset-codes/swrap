@@ -2,20 +2,15 @@
  * Seal encryption client — shared types.
  *
  * Seal provides field-level and full-submission encryption with access-control
- * policies. The interface is designed to be compatible with the @mysten/seal
- * SDK when it becomes available as a stable npm package.
- *
- * Current implementation: AES-256-GCM via Node.js built-in `crypto` module.
- * This is a real encryption implementation, not a mock. The interface is
- * intentionally swappable with the real Seal SDK later.
+ * policies. This implementation uses the official @mysten/seal SDK.
  */
 
 export interface SealEncryptResult {
-  /** Base64-encoded encrypted blob (iv + authTag + ciphertext). */
+  /** Base64-encoded encrypted blob (header + ciphertext). */
   encryptedData: string
   /** The Seal policy ID used for this encryption. */
   policyId: string
-  /** Algorithm identifier — 'AES-256-GCM' for the current implementation. */
+  /** Algorithm identifier — 'Seal-IBE-BonehFranklin'. */
   algorithm: string
 }
 
