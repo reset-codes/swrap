@@ -325,7 +325,7 @@ This plan implements the Walrus Testnet POC on branch `walrus-poc` (forked from 
     - Ensure all tests pass, ask the user if questions arise.
     - _Requirements: R10.3, R11.2, R19.16, R16.1, R16.3_
 
-- [ ] 6. Phase 5 — Form submission UI (Form_Submission_UI)
+- [x] 6. Phase 5 — Form submission UI (Form_Submission_UI)
   - [x] 6.1 Implement `apps/api/submissions.ts`
     - `POST /api/poc/submissions` with `{ form_blob_id, answers }`: retrieve form blob, decrypt, validate `answers` against the `FormSchema` (via `validateSubmissionAgainstForm`), assemble a `Submission`, canonicalize → encrypt → `walrus.put`, return `{ blob_id, form_blob_id, schema_hash, submitted_at }`.
     - `GET /api/poc/submissions/[blob_id]`: owner-only decrypt of submission blob; returns parsed `Submission`.
@@ -361,55 +361,55 @@ This plan implements the Walrus Testnet POC on branch `walrus-poc` (forked from 
     - Non-owner signer attempting decrypt → `SealAuthError` (reuses R17.9 property framework).
     - _Requirements: R8.4, R12.1, R12.3, R12.5, R17.5, R17.9_
 
-  - [-] 6.7 Phase 5 checkpoint and commit
+  - [x] 6.7 Phase 5 checkpoint and commit
     - Run `scripts/phase-verify.sh --probe /poc/forms/[sample_blob_id]/fill --probe /api/poc/submissions`.
     - Commit: `feat: add form submission encryption flow`.
     - Ensure all tests pass, ask the user if questions arise.
     - _Requirements: R12.3, R16.1, R16.3_
 
 - [ ] 7. Phase 6 — Sui metadata anchoring
-  - [ ] 7.1 Author the Move package `packages/sui/move/sealbase_poc/`
+  - [x] 7.1 Author the Move package `packages/sui/move/sealbase_poc/`
     - `Move.toml` with `edition = "2024.beta"` and the Sui framework dep from design.md.
     - `sources/metadata.move` with `MetadataRecord`, `MetadataAnchored` event, `anchor_record` entry function, error constants `EInvalidRecordType / EInvalidBlobId / EInvalidSchemaHash`.
     - Add README snippet with the manual `sui client publish --gas-budget 100000000` command and a note to paste the returned packageId into `SUI_POC_PACKAGE_ID` in `.env`.
     - _Requirements: R13.1, R13.2, R13.3_
 
-  - [ ] 7.2 Implement self-transfer fallback (two-week interim)
+  - [x] 7.2 Implement self-transfer fallback (two-week interim)
     - `packages/sui/src/metadata-anchor.ts` exports `anchorRecord` with two code paths:
       - If `SUI_POC_PACKAGE_ID` is set → Move-call path per design.md (`target: ${pkg}::metadata::anchor_record`, BCS args).
       - Else → self-transfer of a zero-value `Coin<SUI>` with a single `TransactionBlock.pure(vector<u8>)` carrying `"SBPOC"(5B) || record_type(1B) || schema_hash(32B) || blob_id_utf8 || form_blob_id_utf8?"` and log a WARNING `Metadata_Anchor: using self-transfer fallback; publish Move package to upgrade`.
     - Fallback is acceptable for two weeks and MUST be removed before Phase 6 closes (tracked by a TODO deleted in 7.5).
     - _Requirements: R13.1, R13.2, R13.6_
 
-  - [ ] 7.3 Wire anchoring into `apps/api/forms.ts` and `submissions.ts`
+  - [x] 7.3 Wire anchoring into `apps/api/forms.ts` and `submissions.ts`
     - After successful encrypted upload, call `anchorRecord` with `{ blobId, schemaHash, recordType, formBlobId? }`.
     - Response now includes `tx_digest` and `record_id` (or `null` in fallback mode with `anchor_mode: 'self-transfer'`).
     - On anchor failure, do NOT mark the form/submission as anchored in Local_Store (R13.6); the upload itself remains valid (blob is already on Walrus).
     - _Requirements: R13.1, R13.6_
 
-  - [ ] 7.4 Implement `queryMetadataRecords` and `GET /api/poc/metadata/[address]`
+  - [x] 7.4 Implement `queryMetadataRecords` and `GET /api/poc/metadata/[address]`
     - In Move-package mode: query `MetadataAnchored` events by `MoveEventModule: { package, module: 'metadata' }` and/or `getOwnedObjects({ filter: { StructType: ... } })`; return chronologically-ordered `MetadataRecord[]`.
     - In fallback mode: return `{ mode: 'self-transfer', records: [] }` with a developer-visible warning.
     - Thin route at `src/app/api/poc/metadata/[address]/route.ts`.
     - _Requirements: R13.3_
 
-  - [ ] 7.5 Manual publish step + replace fallback
+  - [x] 7.5 Manual publish step + replace fallback
     - Run `sui client publish --gas-budget 100000000` from `packages/sui/move/sealbase_poc/`, capture the packageId, set `SUI_POC_PACKAGE_ID` in `.env`.
     - Delete the self-transfer fallback branch from `metadata-anchor.ts` (Move path is now the only path).
     - Update `/api/poc/health` to surface `sui.anchor_mode: 'move'`.
     - _Requirements: R13.1, R13.2, R13.3_
 
-  - [ ] 7.6 **PBT — R17.6 sha256 integrity invariant** (packages/sui)
+  - [x] 7.6 **PBT — R17.6 sha256 integrity invariant** (packages/sui)
     - **Property 6: sha256(decrypt(retrieve(record.blob_id))) == record.schema_hash** — fast-check arbitrary `FormSchema`; full pipeline (encrypt → upload → anchor) against MSW/in-memory Sui client; fetch MetadataRecord back; recompute hash from decrypted bytes; assert equality.
     - **Validates: Requirements R13.4, R13.5, R17.6**
     - _Requirements: R13.4, R13.5, R17.6_
 
-  - [ ] 7.7 **PBT — R17.7 plaintext-leak invariant on Metadata_Record**
+  - [x] 7.7 **PBT — R17.7 plaintext-leak invariant on Metadata_Record**
     - **Property 7: no plaintext substring in Metadata_Record** — fast-check arbitrary `FormSchema` containing random string values (including printable ASCII with length > 16 chars to rule out coincidental collisions); run full pipeline; fetch the `MetadataRecord` bytes (BCS-encoded); assert no field value from the plaintext schema appears as a contiguous byte substring anywhere in the serialized record.
     - **Validates: Requirements R13.2, R17.7**
     - _Requirements: R13.2, R17.7_
 
-  - [ ] 7.8 Phase 6 checkpoint and commit
+  - [-] 7.8 Phase 6 checkpoint and commit
     - Run `scripts/phase-verify.sh --probe /api/poc/metadata/[active_address]`.
     - Commit: `feat: anchor walrus blob metadata on sui testnet`.
     - Ensure all tests pass, ask the user if questions arise.

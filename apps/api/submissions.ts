@@ -7,13 +7,14 @@
  *   - Compute schema_hash, assemble Submission
  *   - Validate submission against form (validateSubmissionAgainstForm)
  *   - Canonicalize → encrypt → walrus.put
- *   - Return { blob_id, form_blob_id, schema_hash, submitted_at }
+ *   - anchorMetadata (best-effort)
+ *   - Return { blob_id, form_blob_id, schema_hash, submitted_at, tx_digest }
  *
  * GET /api/poc/submissions/[blob_id]
  *   - Owner-only decrypt of submission blob
  *   - Returns parsed Submission
  *
- * Requirements: R12.1, R12.2, R12.3, R12.5
+ * Requirements: R12.1, R12.2, R12.3, R12.5, R13.1, R13.6
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -26,7 +27,7 @@ import {
 } from '@poc/shared';
 import { schemaHashHexSync } from '@poc/shared/schema-hash-server';
 import { encrypt, decrypt } from '@poc/seal';
-import { detectLocalSigner } from '@poc/sui';
+import { detectLocalSigner, anchorMetadata, createSuiClient } from '@poc/sui';
 import { createWalrusClient } from '@poc/walrus';
 import { toErrorResponse } from './error-envelope';
 import type { Submission } from '@poc/shared';
@@ -226,13 +227,32 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return toErrorResponse(err);
   }
 
-  // 14. Return { blob_id, form_blob_id, schema_hash, submitted_at }
+  const blobId = putResult.blobId;
+
+  // 14. Anchor metadata on Sui (best-effort — errors are logged but do not fail the request)
+  let tx_digest: string | null = null;
+  try {
+    const suiClient = createSuiClient(env.SUI_RPC_URL);
+    const anchorResult = await anchorMetadata(
+      suiClient,
+      signerResult.signer,
+      { blobId, schemaHash: schema_hash, recordType: 'submission', formBlobId: form_blob_id, createdAt: submitted_at },
+      env.SUI_POC_PACKAGE_ID,
+    );
+    tx_digest = anchorResult.txDigest;
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Metadata_Anchor: anchoring failed (non-fatal)', err);
+  }
+
+  // 15. Return { blob_id, form_blob_id, schema_hash, submitted_at, tx_digest }
   return NextResponse.json(
     {
-      blob_id: putResult.blobId,
+      blob_id: blobId,
       form_blob_id,
       schema_hash,
       submitted_at,
+      tx_digest,
     },
     { status: 200 },
   );

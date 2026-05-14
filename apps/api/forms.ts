@@ -4,7 +4,7 @@
  * POST /api/poc/forms
  *   - Default (no `plaintext: true`): encrypted path.
  *     validate → canonicalize → schemaHashHex → Seal.encrypt → walrus.put
- *     → return { blob_id, schema_hash, created_at, tx_digest: null }
+ *     → anchorMetadata (best-effort) → return { blob_id, schema_hash, created_at, tx_digest }
  *   - When DEV_ALLOW_PLAINTEXT=true and body.plaintext===true: plaintext path.
  *     canonicalize → walrus.put → return { blob_id, created_at }
  *
@@ -13,7 +13,7 @@
  *     walrus.get → Seal.decrypt → parseFormSchema → return { form_schema, blob_id, schema_hash }
  *   - When ?raw=true: return raw bytes as application/octet-stream.
  *
- * Requirements: R6.1, R6.2, R6.3, R6.6, R6.7, R7.1, R7.2, R8.1, R8.2, R8.3, R8.6
+ * Requirements: R6.1, R6.2, R6.3, R6.6, R6.7, R7.1, R7.2, R8.1, R8.2, R8.3, R8.6, R13.1, R13.6
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -25,7 +25,7 @@ import {
 } from '@poc/shared';
 import { schemaHashHexSync } from '@poc/shared/schema-hash-server';
 import { encrypt, decrypt, looksLikeEncryptedBlob } from '@poc/seal';
-import { detectLocalSigner } from '@poc/sui';
+import { detectLocalSigner, anchorMetadata, createSuiClient } from '@poc/sui';
 import { createWalrusClient } from '@poc/walrus';
 import { toErrorResponse } from './error-envelope';
 
@@ -203,13 +203,32 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return toErrorResponse(err);
   }
 
-  // 11. Return blob_id, schema_hash, created_at, tx_digest (null — Sui anchoring deferred to Phase 6)
+  const blobId = putResult.blobId;
+  const createdAt = new Date().toISOString();
+
+  // 11. Anchor metadata on Sui (best-effort — errors are logged but do not fail the request)
+  let tx_digest: string | null = null;
+  try {
+    const suiClient = createSuiClient(env.SUI_RPC_URL);
+    const anchorResult = await anchorMetadata(
+      suiClient,
+      signerResult.signer,
+      { blobId, schemaHash: schema_hash, recordType: 'form', createdAt },
+      env.SUI_POC_PACKAGE_ID,
+    );
+    tx_digest = anchorResult.txDigest;
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Metadata_Anchor: anchoring failed (non-fatal)', err);
+  }
+
+  // 12. Return blob_id, schema_hash, created_at, tx_digest
   return NextResponse.json(
     {
-      blob_id: putResult.blobId,
+      blob_id: blobId,
       schema_hash,
-      created_at: new Date().toISOString(),
-      tx_digest: null,
+      created_at: createdAt,
+      tx_digest,
     },
     { status: 200 },
   );
