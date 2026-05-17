@@ -4,7 +4,10 @@
  * SubmissionDetailPanel — read-only view of a decrypted submission's answers.
  * Used in the owner's submission detail view.
  *
- * Requirements: R12.5, R19.6, R19.7
+ * Uses UX_Vocabulary helpers to mask raw chain identifiers in primary flows.
+ * Raw blob IDs are only shown when advancedView is enabled.
+ *
+ * Requirements: R12.5, R19.6, R19.7, 8.1, 8.3
  */
 
 import * as React from 'react';
@@ -14,6 +17,7 @@ import { Input } from '../ui/Input';
 import { Textarea } from '../ui/Textarea';
 import { Badge } from '../ui/Badge';
 import { EncryptedSubmissionIndicator } from './EncryptedSubmissionIndicator';
+import { maskBlobId, useAdvancedView } from '../../lib/copy/advanced-view';
 
 export interface SubmissionDetailPanelProps {
   submission: Submission;
@@ -33,6 +37,8 @@ export function SubmissionDetailPanel({
   submission,
   formSchema,
 }: SubmissionDetailPanelProps) {
+  const [advancedView] = useAdvancedView();
+
   // Build a map from field label → answer value using the answers record
   const answersMap = submission.answers as Record<string, unknown>;
 
@@ -59,13 +65,13 @@ export function SubmissionDetailPanel({
         <EncryptedSubmissionIndicator />
       </div>
 
-      {/* Blob reference */}
+      {/* Submission reference — masked unless advanced view is enabled */}
       <div className="flex flex-col gap-1">
         <span className="text-token-xs font-medium text-text-tertiary uppercase tracking-wide">
           Submission reference
         </span>
         <span className="font-mono text-token-sm text-text-secondary">
-          {submission.form_blob_id}
+          {maskBlobId(submission.form_blob_id, advancedView)}
         </span>
       </div>
 

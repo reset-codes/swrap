@@ -16,6 +16,7 @@ export default defineConfig({
       'apps/**/*.test.ts',
       'apps/**/*.test.tsx',
       'packages/**/*.test.ts',
+      'db/**/*.test.ts',
     ],
     setupFiles: ['./vitest.setup.ts'],
     environment: 'node',

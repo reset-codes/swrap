@@ -25,8 +25,12 @@
 import http from 'node:http';
 import { loadServerConfig } from './server-config';
 import { createApp } from './app';
+import { detectLegacyConfig } from './middleware/legacy-detector';
 
 async function main(): Promise<void> {
+  // Detect forbidden legacy env vars before anything else — fail fast
+  detectLegacyConfig();
+
   // Load and validate configuration at startup — fail fast if misconfigured
   const config = loadServerConfig();
 

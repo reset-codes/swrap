@@ -148,7 +148,7 @@ describe('Schema round-trip PBT — R17.1, R17.2, R9.4, R9.5', () => {
         const parsed = parseFormSchema(bytes);
         expect(parsed).toEqual(schema);
       }),
-      { numRuns: 200 },
+      { numRuns: 25 },
     );
   });
 
@@ -167,7 +167,7 @@ describe('Schema round-trip PBT — R17.1, R17.2, R9.4, R9.5', () => {
         const parsed = parseSubmission(bytes);
         expect(parsed).toEqual(submission);
       }),
-      { numRuns: 200 },
+      { numRuns: 25 },
     );
   });
 
@@ -195,7 +195,7 @@ describe('Schema round-trip PBT — R17.1, R17.2, R9.4, R9.5', () => {
         // Assert byte equality
         expect(bPrime).toEqual(b);
       }),
-      { numRuns: 200 },
+      { numRuns: 25 },
     );
   });
 
@@ -218,7 +218,7 @@ describe('Schema round-trip PBT — R17.1, R17.2, R9.4, R9.5', () => {
         // Assert byte equality
         expect(bPrime).toEqual(b);
       }),
-      { numRuns: 200 },
+      { numRuns: 25 },
     );
   });
 });

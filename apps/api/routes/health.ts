@@ -1,108 +1,122 @@
 /**
- * Health route for the Express VPS server.
+ * Health route for the Express VPS API server.
  *
- * GET /health — Returns system status: wallet, Walrus, and Sui connectivity.
- * Public route — no authentication required.
+ * GET /health — Returns liveness/readiness status.
  *
- * Requirements: R2.3, R4.3, R5.3
+ * Checks:
+ *   1. Database connectivity — lightweight SELECT 1 query via Prisma.
+ *   2. Infrastructure_Wallet availability — verifies INFRASTRUCTURE_WALLET_SECRET
+ *      env var is set (never logs or returns the actual credential value).
+ *
+ * Response shape:
+ *   {
+ *     status: 'ok' | 'degraded',
+ *     checks: {
+ *       db: 'ok' | 'error',
+ *       infraWallet: 'ok' | 'missing',
+ *     },
+ *     timestamp: string,   // ISO 8601
+ *   }
+ *
+ * HTTP 200 when all checks pass, HTTP 503 when any check fails.
+ *
+ * SECURITY: The actual INFRASTRUCTURE_WALLET_SECRET value is NEVER logged,
+ * returned, or included in any response field. Only its presence is checked.
+ *
+ * Requirements: health check for liveness/readiness
  */
 
 import { Router } from 'express';
+import { PrismaClient } from '@prisma/client';
 import type { ServerConfig } from '../server-config';
-import { loadPocEnv } from '@poc/shared';
-import { createWalrusClient } from '@poc/walrus';
-import { createSuiClient, getBalance } from '@poc/sui';
-import { decodeSuiPrivateKey } from '@mysten/sui/cryptography';
-import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
+
+// ---------------------------------------------------------------------------
+// Response shape
+// ---------------------------------------------------------------------------
+
+export interface HealthCheckResponse {
+  status: 'ok' | 'degraded';
+  checks: {
+    db: 'ok' | 'error';
+    infraWallet: 'ok' | 'missing';
+  };
+  timestamp: string;
+}
+
+// ---------------------------------------------------------------------------
+// Prisma client singleton for health checks
+// ---------------------------------------------------------------------------
+
+// A module-level Prisma client is acceptable here because the health endpoint
+// is called frequently and we want connection reuse. The client is lazily
+// initialised on first request so that import-time failures are avoided.
+let _prisma: PrismaClient | null = null;
+
+function getPrismaClient(databaseUrl: string): PrismaClient {
+  if (!_prisma) {
+    _prisma = new PrismaClient({
+      datasources: { db: { url: databaseUrl } },
+      log: [], // No query logging — avoids leaking connection string details
+    });
+  }
+  return _prisma;
+}
+
+// ---------------------------------------------------------------------------
+// DB connectivity check
+// ---------------------------------------------------------------------------
+
+async function checkDb(databaseUrl: string): Promise<'ok' | 'error'> {
+  const prisma = getPrismaClient(databaseUrl);
+  try {
+    // Lightweight connectivity probe — does not touch application tables.
+    await prisma.$queryRaw`SELECT 1`;
+    return 'ok';
+  } catch {
+    // Any error (connection refused, auth failure, timeout) → 'error'.
+    // The error detail is intentionally not surfaced in the response to avoid
+    // leaking connection string fragments or internal topology.
+    return 'error';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Infrastructure_Wallet availability check
+// ---------------------------------------------------------------------------
+
+function checkInfraWallet(): 'ok' | 'missing' {
+  // SECURITY: Only check presence of the env var — never read, log, or return
+  // the actual credential value.
+  const secret = process.env.INFRASTRUCTURE_WALLET_SECRET;
+  return secret && secret.trim().length > 0 ? 'ok' : 'missing';
+}
+
+// ---------------------------------------------------------------------------
+// Router
+// ---------------------------------------------------------------------------
 
 export function healthRouter(config: ServerConfig): Router {
   const router = Router();
 
-  router.get('/', async (_req, res, next) => {
-    try {
-      const env = loadPocEnv();
+  router.get('/', async (_req, res) => {
+    const [dbStatus, infraWalletStatus] = await Promise.all([
+      checkDb(config.databaseUrl),
+      Promise.resolve(checkInfraWallet()),
+    ]);
 
-      // Derive infra wallet address from key (never expose the key itself)
-      let infraAddress: string | null = null;
-      try {
-        const rawKey = process.env.INFRA_WALLET_PRIVATE_KEY ?? '';
-        if (rawKey) {
-          const { scheme, secretKey } = decodeSuiPrivateKey(rawKey);
-          if (scheme === 'ED25519') {
-            const kp = Ed25519Keypair.fromSecretKey(secretKey);
-            infraAddress = kp.toSuiAddress();
-          }
-        }
-      } catch {
-        // Key decode failed — address stays null
-      }
+    const allOk = dbStatus === 'ok' && infraWalletStatus === 'ok';
 
-      // Walrus health
-      const walrusClient = createWalrusClient({
-        publisherUrl: config.walrusPublisherUrl,
-        aggregatorUrl: config.walrusAggregatorUrl,
-      });
+    const body: HealthCheckResponse = {
+      status: allOk ? 'ok' : 'degraded',
+      checks: {
+        db: dbStatus,
+        infraWallet: infraWalletStatus,
+      },
+      timestamp: new Date().toISOString(),
+    };
 
-      let walrusHealth = {
-        publisher: { ok: false, url: config.walrusPublisherUrl },
-        aggregator: { ok: false, url: config.walrusAggregatorUrl },
-        signer_status: 'not_ready' as 'ready' | 'not_ready',
-      };
-
-      try {
-        const health = await walrusClient.healthCheck();
-        walrusHealth = {
-          publisher: { ok: health.publisher.ok, url: health.publisher.url },
-          aggregator: { ok: health.aggregator.ok, url: health.aggregator.url },
-          signer_status: health.signerStatus,
-        };
-      } catch {
-        // Continue — partial failure allowed
-      }
-
-      // Sui balance
-      let suiBalance: string | null = null;
-      if (infraAddress) {
-        try {
-          const suiClient = createSuiClient(config.suiRpcUrl);
-          const { totalBalance } = await getBalance(suiClient, infraAddress);
-          suiBalance = totalBalance;
-        } catch {
-          // Continue — partial failure allowed
-        }
-      }
-
-      const ok =
-        infraAddress !== null &&
-        walrusHealth.publisher.ok &&
-        walrusHealth.aggregator.ok;
-
-      res.json({
-        ok,
-        server: 'swrap-api',
-        version: '1.0.0',
-        env_flags: {
-          DEV_BYPASS_STORAGE: env.DEV_BYPASS_STORAGE,
-          DEV_LOCAL_SIGNER: env.DEV_LOCAL_SIGNER,
-          DEV_ALLOW_PLAINTEXT: env.DEV_ALLOW_PLAINTEXT,
-          USE_WALRUS_TESTNET: env.USE_WALRUS_TESTNET,
-          USE_SUI_TESTNET: env.USE_SUI_TESTNET,
-        },
-        wallet: {
-          address: infraAddress,
-          sui_balance: suiBalance,
-          network: env.USE_SUI_TESTNET ? 'testnet' : 'mainnet',
-        },
-        walrus: walrusHealth,
-        seal: {
-          mode: 'real',
-          package_id_set: !!config.suiPocPackageId,
-        },
-        timestamp: new Date().toISOString(),
-      });
-    } catch (err) {
-      next(err);
-    }
+    // HTTP 200 when healthy, 503 when any check fails.
+    res.status(allOk ? 200 : 503).json(body);
   });
 
   return router;

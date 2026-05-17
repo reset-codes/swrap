@@ -1,0 +1,195 @@
+# =============================================================================
+# Swrap — Production Docker Compose
+#
+# Target: 2 GB DigitalOcean Ubuntu droplet
+# Memory budget:
+#   web      512M  (Next.js)
+#   api      384M  (Express)
+#   postgres 512M  (PostgreSQL)
+#   nginx     64M  (Nginx reverse proxy)
+#   ─────────────────────────
+#   Total   ~1.5 GB  (~500M headroom for OS + kernel)
+#
+# Usage:
+#   cp .env.deploy.example .env.deploy
+#   # Fill in all values in .env.deploy
+#   docker compose -f docker-compose.prod.yml --env-file .env.deploy up -d
+#
+# Before first deploy:
+#   1. Obtain TLS certificates: certbot certonly --standalone -d <YOUR_DOMAIN>
+#   2. Place nginx config at nginx/conf.d/swrap.conf (see nginx/conf.d/swrap.conf.example)
+#   3. Run database migrations: docker compose -f docker-compose.prod.yml run --rm api node dist/apps/api/server.js migrate
+# =============================================================================
+
+version: '3.9'
+
+# ---------------------------------------------------------------------------
+# Networks — internal bridge for service-to-service communication.
+# Only nginx exposes ports to the host.
+# ---------------------------------------------------------------------------
+networks:
+  swrap_internal:
+    driver: bridge
+
+# ---------------------------------------------------------------------------
+# Volumes — postgres data persisted across container restarts/upgrades.
+# ---------------------------------------------------------------------------
+volumes:
+  postgres_data:
+    driver: local
+
+# ---------------------------------------------------------------------------
+# Services
+# ---------------------------------------------------------------------------
+services:
+
+  # ── PostgreSQL metadata store ─────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    networks:
+      - swrap_internal
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-swrap}
+      POSTGRES_USER: ${POSTGRES_USER:-swrap}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
+      # pg_isready exits 0 when the server is accepting connections.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-swrap} -d ${POSTGRES_DB:-swrap}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Express API server ────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    networks:
+      - swrap_internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      # Compose-internal connection string — uses the service name "postgres" as host.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-swrap}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-swrap}
+      INFRASTRUCTURE_WALLET_SECRET: ${INFRASTRUCTURE_WALLET_SECRET}
+      WALRUS_PUBLISHER_URL: ${WALRUS_PUBLISHER_URL}
+      WALRUS_AGGREGATOR_URL: ${WALRUS_AGGREGATOR_URL}
+      SUI_RPC_URL: ${SUI_RPC_URL}
+      SESSION_SECRET: ${SESSION_SECRET}
+      API_CORS_ORIGINS: ${API_CORS_ORIGINS}
+      API_SECRET_KEY: ${API_SECRET_KEY}
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+    healthcheck:
+      # GET /health returns { status: "ok" | "degraded", ... }.
+      # We check for "ok" in the status field — matches the HealthCheckResponse shape.
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/health | grep -q '\"status\":\"ok\"' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Next.js web app ───────────────────────────────────────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        # Build-time public env vars baked into the Next.js bundle.
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_FIREBASE_API_KEY: ${NEXT_PUBLIC_FIREBASE_API_KEY}
+        NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}
+        NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${NEXT_PUBLIC_FIREBASE_PROJECT_ID}
+        NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET}
+        NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID}
+        NEXT_PUBLIC_FIREBASE_APP_ID: ${NEXT_PUBLIC_FIREBASE_APP_ID}
+    restart: unless-stopped
+    networks:
+      - swrap_internal
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: "0.0.0.0"
+      NEXTAUTH_URL: ${NEXTAUTH_URL}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      FIREBASE_SERVICE_ACCOUNT_KEY: ${FIREBASE_SERVICE_ACCOUNT_KEY}
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
+      # Next.js App Router health route at /_health.
+      # Returns 200 when the server is ready to serve requests.
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/_health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Nginx reverse proxy + TLS termination ─────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    networks:
+      - swrap_internal
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      web:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    volumes:
+      # Nginx site config — see nginx/conf.d/swrap.conf.example for a template.
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      # TLS certificates managed by certbot on the host.
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      # ACME challenge directory for certbot HTTP-01 renewal.
+      - /var/www/certbot:/var/www/certbot:ro
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    healthcheck:
+      # Verify nginx config is valid and the master process is running.
+      test: ["CMD-SHELL", "nginx -t 2>/dev/null && pgrep nginx > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

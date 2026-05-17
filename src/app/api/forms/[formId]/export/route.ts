@@ -26,9 +26,16 @@ import { apiError } from '@/types/api'
 import { listSubmissions, getSubmission } from '@/services/SubmissionService'
 import { decryptField } from '@/services/EncryptionService'
 import { ServiceError } from '@/services/FormService'
-import { readBlobAsJson } from '@/lib/walrus/client'
+import { executeWalrusRead } from '@/lib/wallet/manager'
 import type { FormSchema, FieldConfig } from '@/types/form'
 import type { FieldValue } from '@/types/submission'
+
+// Local helper: read a Walrus blob and parse as JSON
+// (replaces the deleted @/lib/walrus/client readBlobAsJson)
+async function readBlobAsJson<T>(blobId: string): Promise<T> {
+  const buffer = await executeWalrusRead(blobId)
+  return JSON.parse(buffer.toString('utf-8')) as T
+}
 
 // ─── Route params type ────────────────────────────────────────────────────────
 

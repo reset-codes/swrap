@@ -1,7 +1,11 @@
-import { auth, signOut } from '@/lib/auth';
-import { LogOut, Database } from 'lucide-react';
+'use client';
+
+import { LogOut, Database, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SidebarNav } from './SidebarNav';
+import { useSidebar } from './SidebarContext';
+import { cn } from '@/lib/utils';
+import { signOut } from 'next-auth/react';
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
 
@@ -39,64 +43,98 @@ function UserAvatar({ name, image }: { name?: string | null; image?: string | nu
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 
-export async function Sidebar() {
-  const session = await auth();
-  const user = session?.user;
+interface SidebarProps {
+  user?: {
+    name?: string | null;
+    email?: string | null;
+    image?: string | null;
+  };
+}
+
+export function Sidebar({ user }: SidebarProps) {
+  const { isOpen, toggle } = useSidebar();
 
   return (
     <aside
-      className="flex h-full w-60 shrink-0 flex-col border-r border-border bg-surface"
+      className={cn(
+        'relative flex h-full flex-col border-r border-border bg-surface transition-all duration-300 ease-in-out z-30',
+        isOpen ? 'w-60' : 'w-16',
+      )}
       aria-label="Sidebar"
     >
-      {/* ── Logo ─────────────────────────────────────────────────────────── */}
-      <div className="flex h-14 items-center border-b border-border px-4">
-        <span className="text-h3 font-semibold tracking-tight text-text-primary">Swrap</span>
-      </div>
+      <div className="flex h-full flex-col overflow-hidden">
+        {/* ── Logo & Toggle ────────────────────────────────────────────────── */}
+        <div className={cn(
+          "flex h-14 items-center border-b border-border transition-all duration-300",
+          isOpen ? "justify-between px-4" : "justify-center px-0"
+        )}>
+          {isOpen && <span className="text-h3 font-semibold tracking-tight text-text-primary whitespace-nowrap">Swrap</span>}
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn("h-8 w-8 text-text-muted hover:text-text-primary", !isOpen && "h-10 w-10")}
+            onClick={toggle}
+            aria-label={isOpen ? "Collapse sidebar" : "Expand sidebar"}
+          >
+            {isOpen ? <ChevronLeft className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
+          </Button>
+        </div>
 
-      {/* ── Navigation ───────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto px-3 py-4">
-        <SidebarNav />
-      </div>
+        {/* ── Navigation ───────────────────────────────────────────────────── */}
+        <div className="flex-1 overflow-y-auto py-4">
+          <SidebarNav isOpen={isOpen} />
+        </div>
 
-      {/* ── Storage Credits ──────────────────────────────────────────────── */}
-      <div className="border-t border-border px-4 py-3">
-        <div className="flex items-center gap-2 rounded-md bg-muted px-3 py-2">
-          <Database className="h-4 w-4 shrink-0 text-text-muted" aria-hidden="true" />
-          <div className="min-w-0">
-            <p className="text-small font-medium text-text-secondary">Storage Credits</p>
-            <p className="text-small text-text-muted">— credits remaining</p>
+        {/* ── Storage Credits ──────────────────────────────────────────────── */}
+        <div className="border-t border-border p-3">
+          <div className={cn(
+            "flex flex-col gap-2 rounded-md transition-all duration-300",
+            isOpen ? "bg-muted px-3 py-2" : "items-center justify-center bg-transparent px-0"
+          )}>
+            {isOpen ? (
+              <div className="flex items-center gap-2">
+                <Database className="h-4 w-4 shrink-0 text-text-muted" aria-hidden="true" />
+                <div className="min-w-0">
+                  <p className="text-small font-medium text-text-secondary whitespace-nowrap">Credits</p>
+                  <p className="text-small text-text-muted whitespace-nowrap">— remaining</p>
+                </div>
+              </div>
+            ) : (
+              <div title="Storage Credits">
+                <Database className="h-4 w-4 shrink-0 text-text-muted" aria-hidden="true" />
+              </div>
+            )}
           </div>
         </div>
-      </div>
 
-      {/* ── User Section ─────────────────────────────────────────────────── */}
-      <div className="border-t border-border px-4 py-3">
-        <div className="flex items-center gap-2">
-          <UserAvatar name={user?.name} image={user?.image} />
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-small font-medium text-text-primary">
-              {user?.name ?? 'Unknown'}
-            </p>
-            <p className="truncate text-small text-text-muted">{user?.email ?? ''}</p>
-          </div>
-          {/* Sign-out form action */}
-          <form
-            action={async () => {
-              'use server';
-              await signOut({ redirectTo: '/login' });
-            }}
-          >
+        {/* ── User Section (Bottom Left) ───────────────────────────────────── */}
+        <div className="border-t border-border p-3">
+          <div className={cn(
+            "flex items-center gap-2",
+            !isOpen && "flex-col justify-center gap-3"
+          )}>
+            <div title={user?.name ?? 'Unknown'}>
+              <UserAvatar name={user?.name} image={user?.image} />
+            </div>
+            {isOpen && (
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-small font-medium text-text-primary">
+                  {user?.name ?? 'Unknown'}
+                </p>
+                <p className="truncate text-small text-text-muted">{user?.email ?? ''}</p>
+              </div>
+            )}
             <Button
-              type="submit"
               variant="ghost"
               size="icon"
               className="h-7 w-7 shrink-0"
               aria-label="Sign out"
               title="Sign out"
+              onClick={() => signOut({ callbackUrl: '/login' })}
             >
               <LogOut className="h-4 w-4" aria-hidden="true" />
             </Button>
-          </form>
+          </div>
         </div>
       </div>
     </aside>

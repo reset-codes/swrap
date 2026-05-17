@@ -1,25 +1,19 @@
 'use client';
 
 /**
- * UploadStatusPill — renders the four save stages via uxCopy.save.
+ * UploadStatusPill — renders upload progress using UX_Vocabulary labels.
  *
- * Stages:
- *   idle       → show nothing (null)
- *   securing   → uxCopy.save.loading.securing
- *   uploading  → uxCopy.save.loading.uploading
- *   anchoring  → uxCopy.save.loading.anchoring
- *   success    → uxCopy.save.success
- *   error.securing   → uxCopy.save.error.securing
- *   error.uploading  → uxCopy.save.error.uploading
- *   error.anchoring  → uxCopy.save.error.anchoring
+ * This component maps legacy POC save stages to the canonical Upload_State_Machine
+ * states and uses `uploadPhase()` from `ux-copy.ts` for all user-visible labels.
+ * No internal state names are rendered directly.
  *
- * Requirements: R19.6, R19.7, R19.8
+ * Requirements: 6.12, 8.1, 8.8
  */
 
 import * as React from 'react';
-import { uxCopy } from '../../copy/ux-copy';
+import { uploadPhase, type UploadState } from '../../lib/copy/ux-copy';
 
-/** All possible save stage values. */
+/** All possible save stage values (legacy POC interface). */
 export type SaveStage =
   | 'idle'
   | 'securing'
@@ -41,24 +35,32 @@ interface PillConfig {
   variant: PillVariant;
 }
 
+/**
+ * Maps legacy POC save stages to canonical Upload_State_Machine states
+ * and uses `uploadPhase()` for the user-visible label.
+ */
 function getConfig(stage: SaveStage): PillConfig | null {
   switch (stage) {
     case 'idle':
       return null;
     case 'securing':
-      return { label: uxCopy.save.loading.securing, variant: 'loading' };
+      // Maps to 'encrypting' in the Upload_State_Machine
+      return { label: uploadPhase('encrypting'), variant: 'loading' };
     case 'uploading':
-      return { label: uxCopy.save.loading.uploading, variant: 'loading' };
+      // Maps to 'uploading' in the Upload_State_Machine
+      return { label: uploadPhase('uploading'), variant: 'loading' };
     case 'anchoring':
-      return { label: uxCopy.save.loading.anchoring, variant: 'loading' };
+      // Maps to 'uploaded' (saving to network = waiting for indexing)
+      return { label: uploadPhase('uploaded'), variant: 'loading' };
     case 'success':
-      return { label: uxCopy.save.success, variant: 'success' };
+      // Maps to 'indexed' in the Upload_State_Machine
+      return { label: uploadPhase('indexed'), variant: 'success' };
     case 'error.securing':
-      return { label: uxCopy.save.error.securing, variant: 'error' };
+      return { label: uploadPhase('failed'), variant: 'error' };
     case 'error.uploading':
-      return { label: uxCopy.save.error.uploading, variant: 'error' };
+      return { label: uploadPhase('failed'), variant: 'error' };
     case 'error.anchoring':
-      return { label: uxCopy.save.error.anchoring, variant: 'error' };
+      return { label: uploadPhase('failed'), variant: 'error' };
     default: {
       // Exhaustive check — TypeScript will error if a new stage is added without handling it.
       const _exhaustive: never = stage;

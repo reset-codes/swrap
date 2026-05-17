@@ -1,0 +1,54 @@
+{
+  "entry": [
+    "src/app/**/{page,layout,route,error,loading,not-found,template,default}.{ts,tsx}",
+    "src/app/globals.css",
+    "apps/api/server.ts",
+    "apps/api/app.ts",
+    "apps/web/index.ts"
+  ],
+  "project": [
+    "src/**/*.{ts,tsx}",
+    "apps/**/*.{ts,tsx}",
+    "packages/**/*.{ts,tsx}"
+  ],
+  "ignore": [
+    "**/*.test.{ts,tsx}",
+    "**/*.pbt.test.{ts,tsx}",
+    "**/*.spec.{ts,tsx}",
+    "**/node_modules/**",
+    "**/.next/**",
+    "**/dist/**",
+    "**/build/**",
+    "scripts/**",
+    "db/**",
+    "infra/**",
+    "tests/**"
+  ],
+  "ignoreDependencies": [
+    "prisma",
+    "@prisma/client",
+    "ts-node",
+    "tsconfig-paths",
+    "postcss",
+    "autoprefixer",
+    "tailwindcss",
+    "prettier-plugin-tailwindcss"
+  ],
+  "ignoreExportsUsedInFile": true,
+  "rules": {
+    "files": "warn",
+    "exports": "warn",
+    "types": "warn",
+    "nsExports": "warn",
+    "nsTypes": "warn",
+    "duplicates": "warn",
+    "enumMembers": "warn",
+    "classMembers": "warn",
+    "dependencies": "warn",
+    "devDependencies": "warn",
+    "optionalPeerDependencies": "warn",
+    "unlisted": "warn",
+    "binaries": "warn",
+    "unresolved": "warn"
+  }
+}

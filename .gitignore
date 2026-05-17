@@ -30,6 +30,9 @@ yarn-error.log*
 .env.test.local
 .env.production.local
 
+# Production deployment secrets — never commit
+.env.deploy
+
 # Vercel
 .vercel
 

@@ -4,7 +4,7 @@
  * FormBuilderPage — Form_Builder_UI page component.
  *
  * Orchestrates the full form creation flow:
- *   idle → validate → POST /api/poc/forms → upsertForm → navigate to preview
+ *   idle → validate → createForm (via metadata-client) → upsertForm → navigate to preview
  *
  * SaveState union covers all five UX_State primitives (R19.7):
  *   idle | loading (per-stage) | success | error (per-stage) | empty
@@ -17,7 +17,7 @@
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import type { PocField } from '@poc/shared';
-import { uxCopy, type SaveLoadingStage, type SaveErrorStage } from '../copy/ux-copy';
+import { createForm } from '../lib/api/metadata-client';
 import { useLocalStore } from '../stores/local-store';
 import {
   FormTitleInput,
@@ -35,6 +35,28 @@ import { ContentFrame } from '../components/layout/ContentFrame';
 import { PageHeader } from '../components/layout/PageHeader';
 import { AppShell } from '../components/layout/AppShell';
 import { FileText } from 'lucide-react';
+import { privacyModeLabel, uploadPhase } from '../lib/copy/ux-copy';
+
+// POC UX copy strings (inlined — apps/web/copy/ux-copy was removed as a duplicate)
+const pocCopy = {
+  save: {
+    idle: 'Save form',
+    loading: {
+      securing: uploadPhase('encrypting'),
+      uploading: uploadPhase('uploading'),
+      anchoring: uploadPhase('uploaded'),
+    },
+    success: 'Form saved successfully.',
+    error: {
+      securing: 'Failed to secure your form. Please try again.',
+      uploading: 'Upload failed. Please check your connection and try again.',
+      anchoring: 'Could not save to the network. Please try again.',
+    },
+  },
+} as const;
+
+type SaveLoadingStage = keyof typeof pocCopy.save.loading;
+type SaveErrorStage = keyof typeof pocCopy.save.error;
 
 // ---------------------------------------------------------------------------
 // SaveState union — five UX_State primitives (R19.7)
@@ -109,33 +131,12 @@ function getFieldLabelErrors(
 }
 
 // ---------------------------------------------------------------------------
-// API response shape
+// Map API error code to SaveErrorStage
 // ---------------------------------------------------------------------------
 
-interface SaveApiResponse {
-  blob_id: string;
-  schema_hash: string;
-  created_at: string;
-  tx_digest?: string | null;
-}
-
-interface SaveApiError {
-  error: {
-    code: string;
-    stage: string;
-    message: string;
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Map API error stage to SaveErrorStage
-// ---------------------------------------------------------------------------
-
-function toSaveErrorStage(apiStage: string): SaveErrorStage {
-  if (apiStage === 'securing' || apiStage === 'uploading' || apiStage === 'anchoring') {
-    return apiStage;
-  }
-  // Default to 'uploading' for unknown stages
+function toSaveErrorStage(apiCode: string): SaveErrorStage {
+  if (apiCode === 'Internal' || apiCode === 'BlobNotFound') return 'uploading';
+  if (apiCode === 'Unauthorized' || apiCode === 'Forbidden') return 'securing';
   return 'uploading';
 }
 
@@ -149,6 +150,7 @@ export function FormBuilderPage() {
   // Form state — preserved on validation failure (R10.7, R10.8)
   const [title, setTitle] = React.useState('');
   const [fields, setFields] = React.useState<PocField[]>([]);
+  const [privacyMode, setPrivacyMode] = React.useState<'public' | 'private'>('public');
   const [saveState, setSaveState] = React.useState<SaveState>({ status: 'idle' });
   const [validationErrors, setValidationErrors] = React.useState<ValidationError[]>([]);
 
@@ -210,38 +212,27 @@ export function FormBuilderPage() {
     setSaveState({ status: 'loading', stage: 'securing' });
 
     try {
-      const formSchema = {
+      const formDefinition = {
         title,
         fields,
         version: 1 as const,
         created_at: new Date().toISOString(),
       };
 
-      // POST to /api/poc/forms
-      // Stage transitions are driven by the server's error envelope stage field.
-      // We optimistically show 'securing' → 'uploading' → 'anchoring' as the
-      // request progresses (the server does all three in sequence).
+      // Transition to uploading stage before the API call
       setSaveState({ status: 'loading', stage: 'uploading' });
 
-      const response = await fetch('/api/poc/forms', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ form_schema: formSchema }),
-      });
+      // Use the canonical metadata-client to create the form.
+      // The API_Server handles Walrus upload and Postgres metadata indexing.
+      // Session token is empty string for now (auth session wired in a later task).
+      const result = await createForm(
+        { formDefinition, privacyMode },
+        '', // session token — wired in auth task
+      );
 
-      if (!response.ok) {
-        // Parse error envelope to get the failing stage
-        let stage: SaveErrorStage = 'uploading';
-        let message: string = uxCopy.save.error.uploading;
-
-        try {
-          const errBody = (await response.json()) as SaveApiError;
-          stage = toSaveErrorStage(errBody.error?.stage ?? '');
-          message = String(uxCopy.save.error[stage]);
-        } catch {
-          // JSON parse failed — use defaults
-        }
-
+      if (!result.ok) {
+        const stage = toSaveErrorStage(result.error.code);
+        const message = String(pocCopy.save.error[stage]);
         setSaveState({ status: 'error', stage, message });
         return;
       }
@@ -249,16 +240,16 @@ export function FormBuilderPage() {
       // Show anchoring stage briefly before success
       setSaveState({ status: 'loading', stage: 'anchoring' });
 
-      const data = (await response.json()) as SaveApiResponse;
-      const blobId = data.blob_id;
+      const formRow = result.result;
+      const blobId = formRow.walrusBlobId;
 
       // Persist to Local_Store (R10.4)
       useLocalStore.getState().upsertForm({
         blobId,
-        schemaHash: data.schema_hash,
+        schemaHash: formRow.contentDigest,
         title,
-        ownerAddress: '', // populated by server; we store what we have
-        createdAt: data.created_at,
+        ownerAddress: formRow.ownerAddress,
+        createdAt: formRow.createdAt,
       });
 
       setSaveState({ status: 'success', blobId });
@@ -267,7 +258,7 @@ export function FormBuilderPage() {
       router.push(`/poc/forms/${blobId}`);
     } catch (err) {
       // Network error or unexpected failure
-      const message = err instanceof Error ? err.message : uxCopy.save.error.uploading;
+      const message = err instanceof Error ? err.message : pocCopy.save.error.uploading;
       setSaveState({ status: 'error', stage: 'uploading', message });
     }
   }
@@ -289,7 +280,7 @@ export function FormBuilderPage() {
       <AppShell>
         <ContentFrame>
           <div className="flex items-center justify-center py-24">
-            <LoadingState mode="block" label={uxCopy.save.success} />
+            <LoadingState mode="block" label={pocCopy.save.success} />
           </div>
         </ContentFrame>
       </AppShell>
@@ -304,7 +295,7 @@ export function FormBuilderPage() {
           <div className="flex items-center justify-center py-24">
             <LoadingState
               mode="block"
-              label={uxCopy.save.loading[saveState.stage]}
+              label={pocCopy.save.loading[saveState.stage]}
             />
           </div>
         </ContentFrame>
@@ -328,9 +319,9 @@ export function FormBuilderPage() {
               size="md"
               onClick={handleSave}
               disabled={isLoading}
-              aria-label={uxCopy.save.idle}
+              aria-label={pocCopy.save.idle}
             >
-              {uxCopy.save.idle}
+              {pocCopy.save.idle}
             </Button>
           }
         />
@@ -361,6 +352,40 @@ export function FormBuilderPage() {
             error={titleError}
             disabled={isLoading}
           />
+
+          {/* Privacy mode selector — uses UX vocabulary labels (R8.2) */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-token-sm font-medium text-text-primary">
+              Access
+            </label>
+            <div className="flex gap-2" role="radiogroup" aria-label="Form access mode">
+              {(['public', 'private'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  role="radio"
+                  aria-checked={privacyMode === mode}
+                  onClick={() => setPrivacyMode(mode)}
+                  disabled={isLoading}
+                  className={[
+                    'flex items-center gap-2 rounded-md border px-3 py-2 text-token-sm transition-colors',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus',
+                    privacyMode === mode
+                      ? 'border-border-strong bg-bg-subtle text-text-primary font-medium'
+                      : 'border-border-subtle bg-bg-base text-text-secondary hover:border-border-strong hover:text-text-primary',
+                    isLoading ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
+                  ].join(' ')}
+                >
+                  {privacyModeLabel(mode)}
+                </button>
+              ))}
+            </div>
+            <p className="text-token-xs text-text-tertiary">
+              {privacyMode === 'private'
+                ? 'Only you can view responses. Responses are encrypted before storage.'
+                : 'Anyone with the link can view responses.'}
+            </p>
+          </div>
 
           {/* UX_State: empty — no fields yet */}
           {isEmpty ? (

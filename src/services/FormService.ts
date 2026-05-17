@@ -11,8 +11,7 @@
  */
 
 import { prisma } from '@/lib/prisma/client'
-import { executeWalrusWrite } from '@/lib/wallet/manager'
-import { readBlobAsJson } from '@/lib/walrus/client'
+import { executeWalrusWrite, executeWalrusRead } from '@/lib/wallet/manager'
 import type {
   CreateFormInput,
   FieldConfig,
@@ -21,7 +20,16 @@ import type {
   UpdateFormInput,
 } from '@/types/form'
 import { checkSufficient, deduct } from './CreditService'
-import { createPolicy } from '@/lib/seal/client'
+
+// ---------------------------------------------------------------------------
+// Local helper: read a Walrus blob and parse as JSON
+// (replaces the deleted @/lib/walrus/client readBlobAsJson)
+// ---------------------------------------------------------------------------
+
+async function readBlobAsJson<T>(blobId: string): Promise<T> {
+  const buffer = await executeWalrusRead(blobId)
+  return JSON.parse(buffer.toString('utf-8')) as T
+}
 
 // ─── ServiceError ─────────────────────────────────────────────────────────────
 
@@ -168,7 +176,10 @@ export async function createForm(
   // Generate Seal policy if encryption is enabled
   let sealPolicyId: string | undefined = undefined
   if (input.encryptionMode !== 'none') {
-    const policy = await createPolicy(formId, ['admin', 'owner'])
+    // NOTE: Seal policy creation has been migrated to apps/api/services/infrastructure-wallet.ts.
+    // This legacy src/ path throws until the form creation flow is migrated to the canonical API.
+    const { executeSealCreatePolicy } = await import('@/lib/wallet/manager')
+    const policy = await executeSealCreatePolicy(formId, ['admin', 'owner'])
     sealPolicyId = policy.policyId
   }
 
@@ -342,7 +353,9 @@ export async function updateForm(
   const newEncryptionMode = input.encryptionMode ?? currentSchema.encryptionMode
   
   if (newEncryptionMode !== 'none' && !sealPolicyId) {
-    const policy = await createPolicy(existing.id, ['admin', 'owner'])
+    // NOTE: Seal policy creation has been migrated to apps/api/services/infrastructure-wallet.ts.
+    const { executeSealCreatePolicy } = await import('@/lib/wallet/manager')
+    const policy = await executeSealCreatePolicy(existing.id, ['admin', 'owner'])
     sealPolicyId = policy.policyId
   }
 

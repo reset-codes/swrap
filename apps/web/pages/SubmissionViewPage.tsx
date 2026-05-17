@@ -1,10 +1,11 @@
 'use client';
 
 /**
- * SubmissionViewPage — owner-only view of a decrypted submission by Blob_ID.
+ * SubmissionViewPage — owner-only view of a submission by Blob_ID.
  *
- * Fetches GET /api/poc/submissions/[blob_id], decrypts server-side, and
- * renders the parsed Submission via SubmissionDetailPanel in read-only mode.
+ * Fetches submission metadata via metadata-client.getSubmission(), then
+ * requests decryption via metadata-client.requestDecryption() for private
+ * submissions, or fetches content from Walrus for public submissions.
  *
  * FetchState union: idle | loading | success(submission) | error(stage, message)
  *
@@ -18,12 +19,46 @@
 
 import * as React from 'react';
 import type { Submission } from '@poc/shared';
-import { uxCopy } from '../copy/ux-copy';
+import { getSubmission, requestDecryption } from '../lib/api/metadata-client';
 import { LoadingState } from '../components/ui';
 import { ContentFrame } from '../components/layout/ContentFrame';
 import { PageHeader } from '../components/layout/PageHeader';
 import { AppShell } from '../components/layout/AppShell';
 import { SubmissionDetailPanel } from '../components/submissions';
+
+// POC UX copy strings (inlined — apps/web/copy/ux-copy was removed as a duplicate)
+const pocCopy = {
+  fetch: {
+    loading: 'Loading your form…',
+    error: 'Could not load the form. Please check the link and try again.',
+  },
+} as const;
+
+// ---------------------------------------------------------------------------
+// Walrus aggregator URL helper
+// ---------------------------------------------------------------------------
+
+function getWalrusAggregatorUrl(): string {
+  if (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_WALRUS_AGGREGATOR_URL) {
+    return process.env.NEXT_PUBLIC_WALRUS_AGGREGATOR_URL.replace(/\/+$/, '');
+  }
+  return 'https://aggregator.walrus-testnet.walrus.space';
+}
+
+/**
+ * Fetch raw bytes for a Walrus blob by its blob ID.
+ * Used to retrieve public submission content from Walrus.
+ */
+async function walrusFetchBlob(blobId: string): Promise<Uint8Array> {
+  const base = getWalrusAggregatorUrl();
+  const url = `${base}/v1/blobs/${encodeURIComponent(blobId)}`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Walrus fetch failed: ${response.status} ${response.statusText}`);
+  }
+  const buffer = await response.arrayBuffer();
+  return new Uint8Array(buffer);
+}
 
 // ---------------------------------------------------------------------------
 // FetchState union — four UX_State primitives (R19.7)
@@ -34,23 +69,6 @@ type FetchState =
   | { status: 'loading' }
   | { status: 'success'; submission: Submission }
   | { status: 'error'; stage: string; message: string };
-
-// ---------------------------------------------------------------------------
-// API response shapes
-// ---------------------------------------------------------------------------
-
-interface FetchApiSuccess {
-  submission: Submission;
-  blob_id: string;
-}
-
-interface FetchApiError {
-  error: {
-    code: string;
-    stage: string;
-    message: string;
-  };
-}
 
 // ---------------------------------------------------------------------------
 // BlobReferenceChip — monospace, click-to-copy (R19.7)
@@ -157,36 +175,85 @@ export function SubmissionViewPage({ blobId }: SubmissionViewPageProps) {
       setFetchState({ status: 'loading' });
 
       try {
-        const response = await fetch(
-          `/api/poc/submissions/${encodeURIComponent(blobId)}`,
-        );
+        // Step 1: Fetch submission metadata via canonical metadata-client
+        const metaResult = await getSubmission(blobId, ''); // session token wired in auth task
 
         if (cancelled) return;
 
-        if (!response.ok) {
-          let stage = 'loading';
-          let message: string = uxCopy.fetch.error;
-
-          try {
-            const errBody = (await response.json()) as FetchApiError;
-            stage = errBody.error?.stage ?? 'loading';
-            message = errBody.error?.message ?? uxCopy.fetch.error;
-          } catch {
-            // JSON parse failed — use defaults
-          }
-
-          setFetchState({ status: 'error', stage, message });
+        if (!metaResult.ok) {
+          setFetchState({
+            status: 'error',
+            stage: 'loading',
+            message: metaResult.error.message ?? pocCopy.fetch.error,
+          });
           return;
         }
 
-        const data = (await response.json()) as FetchApiSuccess;
+        const submissionRow = metaResult.result;
+
+        // Step 2: Retrieve submission content
+        let submission: Submission;
+
+        if (submissionRow.privacyMode === 'private') {
+          // For private submissions: request decryption from the API_Server.
+          // The API_Server performs the authorization check and returns plaintext.
+          const decryptResult = await requestDecryption(submissionRow.id, ''); // session token wired in auth task
+
+          if (cancelled) return;
+
+          if (!decryptResult.ok) {
+            const message =
+              decryptResult.error.code === 'Forbidden'
+                ? "You don't have access to that"
+                : decryptResult.error.message ?? pocCopy.fetch.error;
+            setFetchState({ status: 'error', stage: 'decrypt', message });
+            return;
+          }
+
+          // Parse the decrypted plaintext as a Submission
+          try {
+            submission = JSON.parse(decryptResult.result.plaintext) as Submission;
+          } catch {
+            setFetchState({
+              status: 'error',
+              stage: 'parse',
+              message: 'Failed to parse submission content.',
+            });
+            return;
+          }
+        } else {
+          // For public submissions: fetch content from Walrus directly
+          let bytes: Uint8Array;
+          try {
+            bytes = await walrusFetchBlob(submissionRow.walrusBlobId);
+          } catch (walrusErr) {
+            if (cancelled) return;
+            const message = walrusErr instanceof Error ? walrusErr.message : pocCopy.fetch.error;
+            setFetchState({ status: 'error', stage: 'loading', message });
+            return;
+          }
+
+          if (cancelled) return;
+
+          try {
+            const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+            submission = JSON.parse(text) as Submission;
+          } catch {
+            setFetchState({
+              status: 'error',
+              stage: 'parse',
+              message: 'Failed to parse submission content.',
+            });
+            return;
+          }
+        }
 
         if (cancelled) return;
 
-        setFetchState({ status: 'success', submission: data.submission });
+        setFetchState({ status: 'success', submission });
       } catch (err) {
         if (cancelled) return;
-        const message = err instanceof Error ? err.message : uxCopy.fetch.error;
+        const message = err instanceof Error ? err.message : pocCopy.fetch.error;
         setFetchState({ status: 'error', stage: 'loading', message });
       }
     }
@@ -208,7 +275,7 @@ export function SubmissionViewPage({ blobId }: SubmissionViewPageProps) {
       <AppShell>
         <ContentFrame>
           <div className="flex items-center justify-center py-24">
-            <LoadingState mode="block" label={uxCopy.fetch.loading} />
+            <LoadingState mode="block" label={pocCopy.fetch.loading} />
           </div>
         </ContentFrame>
       </AppShell>
@@ -231,7 +298,7 @@ export function SubmissionViewPage({ blobId }: SubmissionViewPageProps) {
               className="rounded-md border border-status-error bg-status-error-bg p-4"
             >
               <p className="text-token-sm font-medium text-status-error">
-                {uxCopy.fetch.error}
+                {pocCopy.fetch.error}
               </p>
               {fetchState.stage && fetchState.stage !== 'loading' && (
                 <p className="mt-1 text-token-xs text-status-error opacity-75">

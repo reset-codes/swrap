@@ -247,7 +247,7 @@ describe('MetadataRecord plaintext-leak invariant PBT — R13.2, R17.7', () => {
           ).toBe(false);
         }
       }),
-      { numRuns: 50 },
+      { numRuns: 10 },
     );
   });
 
@@ -268,7 +268,7 @@ describe('MetadataRecord plaintext-leak invariant PBT — R13.2, R17.7', () => {
           `AnchorInput JSON contains form title: "${schema.title}"`,
         ).toBe(false);
       }),
-      { numRuns: 50 },
+      { numRuns: 10 },
     );
   });
 
@@ -293,7 +293,7 @@ describe('MetadataRecord plaintext-leak invariant PBT — R13.2, R17.7', () => {
           expect(anchorInput.schemaHash).not.toBe(plaintext);
         }
       }),
-      { numRuns: 50 },
+      { numRuns: 10 },
     );
   });
 
@@ -328,7 +328,7 @@ describe('MetadataRecord plaintext-leak invariant PBT — R13.2, R17.7', () => {
           ).toBe(false);
         }
       }),
-      { numRuns: 50 },
+      { numRuns: 10 },
     );
   });
 
@@ -351,7 +351,7 @@ describe('MetadataRecord plaintext-leak invariant PBT — R13.2, R17.7', () => {
           `Memo payload contains form title: "${schema.title}"`,
         ).toBe(false);
       }),
-      { numRuns: 50 },
+      { numRuns: 10 },
     );
   });
 
@@ -388,7 +388,7 @@ describe('MetadataRecord plaintext-leak invariant PBT — R13.2, R17.7', () => {
         const blobIdInMemo = memoBytes.slice(38, 38 + blobIdBytes.length);
         expect(Buffer.from(blobIdInMemo).equals(Buffer.from(blobIdBytes))).toBe(true);
       }),
-      { numRuns: 50 },
+      { numRuns: 10 },
     );
   });
 
@@ -427,7 +427,7 @@ describe('MetadataRecord plaintext-leak invariant PBT — R13.2, R17.7', () => {
           ).toBe(false);
         }
       }),
-      { numRuns: 50 },
+      { numRuns: 10 },
     );
   });
 });

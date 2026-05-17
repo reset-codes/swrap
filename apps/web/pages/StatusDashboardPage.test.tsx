@@ -18,6 +18,8 @@ import { StatusDashboardPage, DASHBOARD_COLUMNS } from './StatusDashboardPage';
 // next/font/google is not available in the test environment
 vi.mock('next/font/google', () => ({
   Inter: () => ({ variable: '--font-inter', className: 'inter' }),
+  Geist: () => ({ variable: '--font-geist', className: 'geist' }),
+  Geist_Mono: () => ({ variable: '--font-geist-mono', className: 'geist-mono' }),
 }));
 
 vi.mock('next/navigation', () => ({

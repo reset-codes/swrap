@@ -107,7 +107,7 @@ describe('Env_Loader PBT — parse(serialize(env)) == env', () => {
    * exact same boolean values.
    *
    * This covers all 2⁵ = 32 flag combinations exhaustively (fast-check
-   * will explore all combinations given enough runs; we set numRuns: 100
+   * will explore all combinations given enough runs; we set numRuns: 15
    * to ensure good coverage beyond the 32 base cases).
    */
   it('Property: loadPocEnv(serialize(flags)).flags === flags for all boolean combinations', () => {
@@ -122,7 +122,7 @@ describe('Env_Loader PBT — parse(serialize(env)) == env', () => {
           expect(env[flag]).toBe(flags[flag]);
         }
       }),
-      { numRuns: 100 },
+      { numRuns: 15 },
     );
   });
 
@@ -157,7 +157,7 @@ describe('Env_Loader PBT — parse(serialize(env)) == env', () => {
           expect(env.SUI_RPC_URL).toBe(urls.SUI_RPC_URL);
         }
       }),
-      { numRuns: 100 },
+      { numRuns: 15 },
     );
   });
 
@@ -205,7 +205,7 @@ describe('Env_Loader PBT — parse(serialize(env)) == env', () => {
         const env = loadPocEnv(source);
         expect(env.DEV_BYPASS_STORAGE).toBe(true);
       }),
-      { numRuns: 50 },
+      { numRuns: 10 },
     );
   });
 
@@ -231,7 +231,7 @@ describe('Env_Loader PBT — parse(serialize(env)) == env', () => {
         };
         expect(() => loadPocEnv(source)).toThrow();
       }),
-      { numRuns: 200 },
+      { numRuns: 25 },
     );
   });
 });

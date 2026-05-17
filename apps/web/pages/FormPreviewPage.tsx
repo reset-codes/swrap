@@ -3,9 +3,10 @@
 /**
  * FormPreviewPage — read-only preview of a saved form by Blob_ID.
  *
- * Fetches GET /api/poc/forms/[blob_id], handles FetchState union
- * (idle/loading/success/error), and renders the parsed schema via
- * FormField primitives in read-only mode.
+ * Fetches form metadata via metadata-client.getForm(), then fetches the
+ * form definition content from Walrus using the walrusBlobId. Handles
+ * FetchState union (idle/loading/success/error), and renders the parsed
+ * schema via FormField primitives in read-only mode.
  *
  * On retrieval or decryption failure, shows a stage-labeled error and
  * does NOT render a partial schema (R10.9).
@@ -20,11 +21,45 @@
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import type { FormSchema } from '@poc/shared';
-import { uxCopy } from '../copy/ux-copy';
+import { getForm } from '../lib/api/metadata-client';
 import { FormField, Input, Textarea, LoadingState, Button } from '../components/ui';
 import { ContentFrame } from '../components/layout/ContentFrame';
 import { PageHeader } from '../components/layout/PageHeader';
 import { AppShell } from '../components/layout/AppShell';
+
+// POC UX copy strings (inlined — apps/web/copy/ux-copy was removed as a duplicate)
+const pocCopy = {
+  fetch: {
+    loading: 'Loading your form…',
+    error: 'Could not load the form. Please check the link and try again.',
+  },
+} as const;
+
+// ---------------------------------------------------------------------------
+// Walrus aggregator URL helper
+// ---------------------------------------------------------------------------
+
+function getWalrusAggregatorUrl(): string {
+  if (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_WALRUS_AGGREGATOR_URL) {
+    return process.env.NEXT_PUBLIC_WALRUS_AGGREGATOR_URL.replace(/\/+$/, '');
+  }
+  return 'https://aggregator.walrus-testnet.walrus.space';
+}
+
+/**
+ * Fetch raw bytes for a Walrus blob by its blob ID.
+ * Used to retrieve form definition content from Walrus.
+ */
+async function walrusFetchBlob(blobId: string): Promise<Uint8Array> {
+  const base = getWalrusAggregatorUrl();
+  const url = `${base}/v1/blobs/${encodeURIComponent(blobId)}`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Walrus fetch failed: ${response.status} ${response.statusText}`);
+  }
+  const buffer = await response.arrayBuffer();
+  return new Uint8Array(buffer);
+}
 
 // ---------------------------------------------------------------------------
 // FetchState union — four UX_State primitives (R19.7)
@@ -35,24 +70,6 @@ type FetchState =
   | { status: 'loading' }
   | { status: 'success'; formSchema: FormSchema }
   | { status: 'error'; stage: string; message: string };
-
-// ---------------------------------------------------------------------------
-// API response shapes
-// ---------------------------------------------------------------------------
-
-interface FetchApiSuccess {
-  form_schema: FormSchema;
-  blob_id: string;
-  schema_hash: string;
-}
-
-interface FetchApiError {
-  error: {
-    code: string;
-    stage: string;
-    message: string;
-  };
-}
 
 // ---------------------------------------------------------------------------
 // BlobReferenceChip — monospace, click-to-copy
@@ -271,34 +288,41 @@ export function FormPreviewPage({ blobId }: FormPreviewPageProps) {
       setFetchState({ status: 'loading' });
 
       try {
-        const response = await fetch(`/api/poc/forms/${encodeURIComponent(blobId)}`);
+        // Step 1: Fetch form metadata via canonical metadata-client
+        const metaResult = await getForm(blobId);
 
         if (cancelled) return;
 
-        if (!response.ok) {
-          let stage = 'loading';
-          let message: string = uxCopy.fetch.error;
-
-          try {
-            const errBody = (await response.json()) as FetchApiError;
-            stage = errBody.error?.stage ?? 'loading';
-            message = errBody.error?.message ?? uxCopy.fetch.error;
-          } catch {
-            // JSON parse failed — use defaults
-          }
-
-          setFetchState({ status: 'error', stage, message });
+        if (!metaResult.ok) {
+          setFetchState({
+            status: 'error',
+            stage: 'loading',
+            message: metaResult.error.message ?? pocCopy.fetch.error,
+          });
           return;
         }
 
-        const data = (await response.json()) as FetchApiSuccess;
+        const formRow = metaResult.result;
+
+        // Step 2: Fetch form definition content from Walrus using the blob ID
+        let formSchema: FormSchema;
+        try {
+          const bytes = await walrusFetchBlob(formRow.walrusBlobId);
+          const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+          formSchema = JSON.parse(text) as FormSchema;
+        } catch (walrusErr) {
+          if (cancelled) return;
+          const message = walrusErr instanceof Error ? walrusErr.message : pocCopy.fetch.error;
+          setFetchState({ status: 'error', stage: 'loading', message });
+          return;
+        }
 
         if (cancelled) return;
 
-        setFetchState({ status: 'success', formSchema: data.form_schema });
+        setFetchState({ status: 'success', formSchema });
       } catch (err) {
         if (cancelled) return;
-        const message = err instanceof Error ? err.message : uxCopy.fetch.error;
+        const message = err instanceof Error ? err.message : pocCopy.fetch.error;
         setFetchState({ status: 'error', stage: 'loading', message });
       }
     }
@@ -320,7 +344,7 @@ export function FormPreviewPage({ blobId }: FormPreviewPageProps) {
       <AppShell>
         <ContentFrame>
           <div className="flex items-center justify-center py-24">
-            <LoadingState mode="block" label={uxCopy.fetch.loading} />
+            <LoadingState mode="block" label={pocCopy.fetch.loading} />
           </div>
         </ContentFrame>
       </AppShell>
@@ -343,7 +367,7 @@ export function FormPreviewPage({ blobId }: FormPreviewPageProps) {
               className="rounded-md border border-status-error bg-status-error-bg p-4"
             >
               <p className="text-token-sm font-medium text-status-error">
-                {uxCopy.fetch.error}
+                {pocCopy.fetch.error}
               </p>
               {fetchState.stage && fetchState.stage !== 'loading' && (
                 <p className="mt-1 text-token-xs text-status-error opacity-75">

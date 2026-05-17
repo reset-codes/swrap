@@ -1,0 +1,21 @@
+# ESLint Baseline — Pre-Cleanup Pass
+# Recorded: 2025-05-16
+# Command: npx next lint
+# Result: 0 errors, 0 warnings
+#
+# This baseline was recorded after fixing the following ESLint errors
+# as part of task 36.1 (static verification pass):
+#
+#   src/components/dashboard/DashboardShell.tsx:
+#     - 'ChevronRight' is defined but never used
+#     - 'Button' is defined but never used
+#     - 'cn' is defined but never used
+#     - 'isOpen' is assigned a value but never used
+#     - 'toggle' is assigned a value but never used
+#
+#   src/app/dashboard/forms/[formId]/page.tsx:
+#     - 'json' is assigned a value but never used
+#
+# Future lint runs must maintain 0 errors and warning count <= 0.
+ERRORS=0
+WARNINGS=0

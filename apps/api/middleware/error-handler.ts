@@ -55,6 +55,20 @@ export function errorHandler(
     }),
   );
 
+  // Handle payload-too-large errors emitted by express.json() body parser
+  if (
+    err instanceof Error &&
+    (err as Error & { type?: string }).type === 'entity.too.large'
+  ) {
+    res.status(413).json({
+      error: {
+        code: 'PayloadTooLarge',
+        message: 'Request body exceeds the maximum allowed size.',
+      },
+    });
+    return;
+  }
+
   if (err instanceof ApiError) {
     res.status(err.statusCode).json({
       error: { code: err.code, message: err.message },

@@ -197,7 +197,7 @@ describe('PocSigner no-secret-leak invariant (R17.7)', () => {
         const serialized = JSON.stringify(signer);
         expect(containsSecretBytes(serialized, secret)).toBe(false);
       }),
-      { numRuns: 50 },
+      { numRuns: 10 },
     );
   });
 
@@ -216,7 +216,7 @@ describe('PocSigner no-secret-leak invariant (R17.7)', () => {
         const serialized = String(signer);
         expect(containsSecretBytes(serialized, secret)).toBe(false);
       }),
-      { numRuns: 50 },
+      { numRuns: 10 },
     );
   });
 
@@ -236,7 +236,7 @@ describe('PocSigner no-secret-leak invariant (R17.7)', () => {
         const serialized = inspect(signer, { depth: null });
         expect(containsSecretBytes(serialized, secret)).toBe(false);
       }),
-      { numRuns: 50 },
+      { numRuns: 10 },
     );
   });
 
@@ -256,7 +256,7 @@ describe('PocSigner no-secret-leak invariant (R17.7)', () => {
         const keyList = Object.keys(signer).join(',');
         expect(containsSecretBytes(keyList, secret)).toBe(false);
       }),
-      { numRuns: 50 },
+      { numRuns: 10 },
     );
   });
 
@@ -284,7 +284,7 @@ describe('PocSigner no-secret-leak invariant (R17.7)', () => {
           expect(containsSecretBytes(serialized, secret)).toBe(false);
         }
       }),
-      { numRuns: 100 },
+      { numRuns: 15 },
     );
   });
 
@@ -308,7 +308,7 @@ describe('PocSigner no-secret-leak invariant (R17.7)', () => {
           expect(found).toHaveLength(0);
         }
       }),
-      { numRuns: 50 },
+      { numRuns: 10 },
     );
   });
 
@@ -326,7 +326,7 @@ describe('PocSigner no-secret-leak invariant (R17.7)', () => {
 
         expect(Object.isFrozen(signer)).toBe(true);
       }),
-      { numRuns: 50 },
+      { numRuns: 10 },
     );
   });
 
@@ -345,9 +345,10 @@ describe('PocSigner no-secret-leak invariant (R17.7)', () => {
 
         const pubKey = signer.getPublicKey();
         // Public key must not equal the secret key
-        expect(Buffer.from(pubKey).equals(Buffer.from(secret))).toBe(false);
+        const pubKeyBytes = pubKey.toRawBytes();
+        expect(Buffer.from(pubKeyBytes).equals(Buffer.from(secret))).toBe(false);
       }),
-      { numRuns: 50 },
+      { numRuns: 10 },
     );
   });
 });

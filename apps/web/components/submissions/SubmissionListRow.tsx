@@ -4,12 +4,16 @@
  * SubmissionListRow — renders a single submission entry in a table row format
  * for the owner's submission list view.
  *
- * Requirements: R12.5, R19.6
+ * Uses UX_Vocabulary masking helpers to hide raw blob IDs in primary flows.
+ * Raw identifiers are only shown when advancedView is enabled.
+ *
+ * Requirements: R12.5, R19.6, 8.1, 8.3
  */
 
 import * as React from 'react';
 import { Badge } from '../ui/Badge';
 import { EncryptedSubmissionIndicator } from './EncryptedSubmissionIndicator';
+import { maskBlobId, useAdvancedView } from '../../lib/copy/advanced-view';
 
 export interface SubmissionListRowProps {
   blobId: string;
@@ -39,7 +43,7 @@ function formatDate(isoString: string): string {
   }
 }
 
-/** Truncates a blob ID for display: shows first 4 and last 4 chars. */
+/** Truncates a blob ID for display in advanced view: shows first 6 and last 4 chars. */
 function truncateBlobId(blobId: string): string {
   if (blobId.length <= 12) return blobId;
   return `${blobId.slice(0, 6)}…${blobId.slice(-4)}`;
@@ -51,25 +55,31 @@ export function SubmissionListRow({
   submittedAt,
   isUnlinked,
 }: SubmissionListRowProps) {
+  const [advancedView] = useAdvancedView();
+
+  // In primary flow, blob IDs are masked. In advanced view, they are truncated for readability.
+  const displayBlobId = advancedView ? truncateBlobId(blobId) : maskBlobId(blobId, advancedView);
+  const displayFormBlobId = advancedView ? truncateBlobId(formBlobId) : maskBlobId(formBlobId, advancedView);
+
   return (
     <tr className="border-b border-border-subtle hover:bg-bg-muted transition-colors duration-fast">
-      {/* Submission blob ref */}
+      {/* Submission reference */}
       <td className="px-4 py-3">
         <span
           className="font-mono text-token-sm text-text-secondary"
-          title={blobId}
+          title={advancedView ? blobId : undefined}
         >
-          {truncateBlobId(blobId)}
+          {displayBlobId}
         </span>
       </td>
 
-      {/* Form blob ref */}
+      {/* Form reference */}
       <td className="px-4 py-3">
         <span
           className="font-mono text-token-sm text-text-tertiary"
-          title={formBlobId}
+          title={advancedView ? formBlobId : undefined}
         >
-          {truncateBlobId(formBlobId)}
+          {displayFormBlobId}
         </span>
       </td>
 

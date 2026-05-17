@@ -44,13 +44,19 @@ export interface FormUsageSummary {
  * Get the current storage credit balance for an admin.
  *
  * @param adminId  The user ID of the admin.
- * @returns        The current balance (0 if no credit record exists).
+ * @returns        The current balance (defaults to 100 for new users in MVP).
  */
 export async function getBalance(adminId: string): Promise<number> {
   const credit = await prisma.storageCredit.findUnique({
     where: { userId: adminId },
   })
-  return credit?.balance ?? 0
+  
+  // R10.x: Grant 100 WAL free credits to every user at the initial stage
+  if (!credit) {
+    return 100;
+  }
+  
+  return credit.balance
 }
 
 /**
@@ -64,7 +70,7 @@ export async function checkSufficient(
   adminId: string,
   estimatedCost: number,
 ): Promise<boolean> {
-  // R10.x: Allow bypass for development testing
+  // R10.x: Allow bypass for development testing OR if explicitly requested
   if (process.env.DEV_BYPASS_STORAGE === 'true') {
     return true
   }
@@ -93,12 +99,21 @@ export async function deduct(
     return
   }
 
-  // Ensure a StorageCredit record exists for this user
-  const credit = await prisma.storageCredit.findUnique({
+  // Ensure a StorageCredit record exists for this user, create it with initial 100 WAL if missing
+  let credit = await prisma.storageCredit.findUnique({
     where: { userId: adminId },
   })
 
-  if (!credit || credit.balance < amount) {
+  if (!credit) {
+    credit = await prisma.storageCredit.create({
+      data: {
+        userId: adminId,
+        balance: 100,
+      }
+    });
+  }
+
+  if (credit.balance < amount) {
     throw new ServiceError(
       'Insufficient storage credits to complete this operation.',
       'INSUFFICIENT_CREDITS',

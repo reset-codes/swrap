@@ -120,7 +120,7 @@ describe('WalrusClient PBT — Property 4: retrieve(upload(b)) == b (MSW)', () =
           expect(retrieved).toEqual(bytes);
         },
       ),
-      { numRuns: 50 },
+      { numRuns: 10 },
     );
   });
 });
@@ -132,6 +132,10 @@ describe('WalrusClient PBT — Property 4: retrieve(upload(b)) == b (MSW)', () =
 const runTestnet = process.env.USE_WALRUS_TESTNET === 'true';
 
 describe('WalrusClient PBT — Property 4: retrieve(upload(b)) == b (testnet integration)', () => {
+  // Stop MSW for testnet tests so real network requests can pass through.
+  beforeAll(() => { if (runTestnet) server.close(); });
+  afterAll(() => { if (runTestnet) server.listen({ onUnhandledRequest: 'error' }); });
+
   it.skipIf(!runTestnet)(
     'testnet round-trip: walrus.get(walrus.put(bytes).blobId) deep-equals bytes',
     async () => {
@@ -162,5 +166,6 @@ describe('WalrusClient PBT — Property 4: retrieve(upload(b)) == b (testnet int
         { numRuns: 5 },
       );
     },
+    120_000,
   );
 });

@@ -6,7 +6,7 @@ import { Loader2 } from 'lucide-react';
 import { FormSettings, type FormSettingsValues } from '@/components/forms/FormSettings';
 import { FormBuilder } from '@/components/forms/FormBuilder';
 import type { FieldConfig, FormMetadata, FormSchema } from '@/types/form';
-import type { ApiSuccess, ApiError } from '@/types/api';
+import type { ApiError } from '@/types/api';
 
 // ─── Edit Form Page ───────────────────────────────────────────────────────────
 
@@ -33,10 +33,7 @@ export default function EditFormPage() {
         const res = await fetch(`/api/forms/${formId}`);
         if (!res.ok) throw new Error('Failed to load form data');
         
-        const json = (await res.json()) as ApiSuccess<{ 
-          form: FormMetadata; 
-          schema: FormSchema 
-        }>;
+        const json = (await res.json()) as { data: { form: FormMetadata; schema: FormSchema } };
         
         const { form: formMeta, schema: formSchema } = json.data;
         
@@ -111,8 +108,8 @@ export default function EditFormPage() {
         return;
       }
 
-      const json = (await response.json()) as ApiSuccess<{ publicUrl: string }>;
-      
+      await response.json();
+
       // Update local state
       if (form) {
         setForm({ ...form, isPublished: true });

@@ -106,13 +106,24 @@ export const authConfig: NextAuthConfig = {
             user.role = existingUser.role as UserRole;
           } else {
             const role = await resolveRoleForNewUser();
-            const created = await prisma.user.create({
-              data: {
-                email: user.email,
-                name: user.name ?? null,
-                image: user.image ?? null,
-                role,
-              },
+            const created = await prisma.$transaction(async (tx) => {
+              const u = await tx.user.create({
+                data: {
+                  email: user.email!,
+                  name: user.name ?? null,
+                  image: user.image ?? null,
+                  role,
+                },
+              });
+
+              await tx.storageCredit.create({
+                data: {
+                  userId: u.id,
+                  balance: 100,
+                },
+              });
+
+              return u;
             });
             user.id = created.id;
             user.role = role;
@@ -143,14 +154,28 @@ export const authConfig: NextAuthConfig = {
           } else {
             // New user — assign role based on whether they are the first user
             const role = await resolveRoleForNewUser();
-            const created = await prisma.user.create({
-              data: {
-                email: user.email,
-                name: user.name ?? null,
-                image: user.image ?? null,
-                role,
-              },
+            
+            const created = await prisma.$transaction(async (tx) => {
+              const u = await tx.user.create({
+                data: {
+                  email: user.email!,
+                  name: user.name ?? null,
+                  image: user.image ?? null,
+                  role,
+                },
+              });
+
+              // Grant 100 WAL free credits to new users
+              await tx.storageCredit.create({
+                data: {
+                  userId: u.id,
+                  balance: 100,
+                },
+              });
+
+              return u;
             });
+
             user.id = created.id;
             user.role = role;
           }

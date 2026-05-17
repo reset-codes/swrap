@@ -14,10 +14,24 @@ import {
   executeWalrusRead,
   executeWalrusWrite,
 } from '@/lib/wallet/manager'
-import { readBlobAsJson, readBlobAsText } from '@/lib/walrus/client'
 import { BlobType } from '@prisma/client'
 import { checkSufficient, deduct } from './CreditService'
 import { ServiceError } from './FormService'
+
+// ---------------------------------------------------------------------------
+// Local helpers: read Walrus blobs as text/JSON
+// (replaces the deleted @/lib/walrus/client helpers)
+// ---------------------------------------------------------------------------
+
+async function readBlobAsText(blobId: string): Promise<string> {
+  const buffer = await executeWalrusRead(blobId)
+  return buffer.toString('utf-8')
+}
+
+async function readBlobAsJson<T>(blobId: string): Promise<T> {
+  const text = await readBlobAsText(blobId)
+  return JSON.parse(text) as T
+}
 
 // ─── Cost estimation ──────────────────────────────────────────────────────────
 

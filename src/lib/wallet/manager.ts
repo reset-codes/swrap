@@ -19,9 +19,55 @@
  * Requirement: R15 — Infrastructure Wallet and Blockchain Abstraction
  */
 
-import { readBlob, writeBlob } from '@/lib/walrus/client'
-import { createPolicy, decrypt, encrypt } from '@/lib/seal/client'
 import { WalletError } from './types'
+
+// ---------------------------------------------------------------------------
+// Inline Walrus helpers (src/lib/walrus was removed as a duplicate module;
+// these minimal helpers replace the deleted client for legacy src/ routes)
+// ---------------------------------------------------------------------------
+
+async function writeBlob(
+  data: Buffer,
+  contentType = 'application/octet-stream',
+): Promise<{ blobId: string }> {
+  const publisherUrl = process.env.WALRUS_PUBLISHER_URL
+  if (!publisherUrl) {
+    throw new WalletError('WALRUS_PUBLISHER_URL is not configured.', 'NOT_CONFIGURED')
+  }
+  const url = `${publisherUrl.replace(/\/+$/, '')}/v1/blobs?epochs=1`
+  // Convert Buffer to ArrayBuffer for fetch body compatibility
+  const bodyBytes: ArrayBuffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer
+  const response = await fetch(url, {
+    method: 'PUT',
+    headers: { 'Content-Type': contentType },
+    body: bodyBytes,
+  })
+  if (!response.ok) {
+    throw new WalletError(`Walrus PUT failed with HTTP ${response.status}`, 'OPERATION_FAILED')
+  }
+  const json = await response.json() as Record<string, unknown>
+  const newlyCreated = json['newlyCreated'] as { blobObject?: { blobId?: string } } | undefined
+  const alreadyCertified = json['alreadyCertified'] as { blobId?: string } | undefined
+  const blobId = newlyCreated?.blobObject?.blobId ?? alreadyCertified?.blobId
+  if (!blobId) {
+    throw new WalletError('Unexpected Walrus publisher response shape', 'OPERATION_FAILED')
+  }
+  return { blobId }
+}
+
+async function readBlob(blobId: string): Promise<Buffer> {
+  const aggregatorUrl = process.env.WALRUS_AGGREGATOR_URL
+  if (!aggregatorUrl) {
+    throw new WalletError('WALRUS_AGGREGATOR_URL is not configured.', 'NOT_CONFIGURED')
+  }
+  const url = `${aggregatorUrl.replace(/\/+$/, '')}/v1/blobs/${encodeURIComponent(blobId)}`
+  const response = await fetch(url, { method: 'GET' })
+  if (!response.ok) {
+    throw new WalletError(`Walrus GET failed with HTTP ${response.status}`, 'OPERATION_FAILED')
+  }
+  const buffer = await response.arrayBuffer()
+  return Buffer.from(buffer)
+}
 
 // ---------------------------------------------------------------------------
 // Key management
@@ -119,100 +165,57 @@ export async function executeWalrusRead(blobId: string): Promise<Buffer> {
 /**
  * Encrypt a string value under a Seal policy using the infrastructure wallet.
  *
- * SECURITY: The `value` parameter is NEVER logged or included in errors.
+ * NOTE: This legacy src/ path has been superseded by the canonical
+ * `apps/api/services/infrastructure-wallet.ts` module. Seal operations in
+ * new code MUST use `sealEncrypt` from that module, which loads the wallet
+ * from `INFRASTRUCTURE_WALLET_SECRET` (not the forbidden `INFRA_WALLET_PRIVATE_KEY`).
  *
- * @param value     The plaintext string to encrypt.
- * @param policyId  The Seal policy ID / IBE identity governing decryption access.
- * @returns         The base64-encoded encrypted blob and algorithm identifier.
- * @throws          WalletError with 'OPERATION_FAILED' on failure.
+ * @throws WalletError with 'NOT_CONFIGURED' — Seal operations must be migrated
+ *         to apps/api/services/infrastructure-wallet.ts.
  */
 export async function executeSealEncrypt(
-  value: string,
-  policyId: string,
+  _value: string,
+  _policyId: string,
 ): Promise<{ encryptedData: string; algorithm: string }> {
-  getInfraWalletKey()
-
-  try {
-    // SECURITY: `value` is passed directly — never referenced in error messages
-    const result = await encrypt(value, policyId)
-    return {
-      encryptedData: result.encryptedData,
-      algorithm: result.algorithm,
-    }
-  } catch (err) {
-    // Log the original error for diagnostics (safe: no plaintext in seal errors)
-    // SECURITY: do NOT include `value` or any derivative in this log message
-    console.error(
-      '[WalletManager] executeSealEncrypt failed:',
-      err instanceof Error ? err.message : String(err),
-    )
-    throw new WalletError(
-      'Seal encryption operation failed.',
-      'OPERATION_FAILED',
-    )
-  }
+  throw new WalletError(
+    'Seal encryption is not available in this path. Use apps/api/services/infrastructure-wallet.ts sealEncrypt instead.',
+    'NOT_CONFIGURED',
+  )
 }
 
 /**
  * Decrypt an encrypted blob in-memory using the infrastructure wallet key.
  *
- * SECURITY: The returned plaintext is NEVER logged or persisted. Callers
- * must treat the result as ephemeral and display-only.
+ * NOTE: This legacy src/ path has been superseded by the canonical
+ * `apps/api/services/infrastructure-wallet.ts` module.
  *
- * @param encryptedData  Base64-encoded encrypted blob from executeSealEncrypt.
- * @returns              The decrypted plaintext wrapped in an object.
- * @throws               WalletError with 'OPERATION_FAILED' on failure,
- *                       or 'NOT_CONFIGURED' if the wallet key is absent.
+ * @throws WalletError with 'NOT_CONFIGURED' — Seal operations must be migrated
+ *         to apps/api/services/infrastructure-wallet.ts.
  */
 export async function executeSealDecrypt(
-  encryptedData: string,
+  _encryptedData: string,
 ): Promise<{ plaintext: string }> {
-  // SECURITY: adminKey is key material — never log it
-  const adminKey = getInfraWalletKey()
-
-  try {
-    // SECURITY: The result of decrypt contains plaintext — never log it
-    const result = await decrypt(encryptedData, adminKey)
-    return { plaintext: result.plaintext }
-  } catch (err) {
-    if (err instanceof WalletError) throw err
-    // Log the original error before swallowing (safe: no plaintext in seal errors)
-    console.error(
-      '[WalletManager] executeSealDecrypt failed:',
-      err instanceof Error ? err.message : String(err),
-    )
-    throw new WalletError(
-      'Seal decryption operation failed.',
-      'OPERATION_FAILED',
-    )
-  }
+  throw new WalletError(
+    'Seal decryption is not available in this path. Use apps/api/services/infrastructure-wallet.ts sealDecrypt instead.',
+    'NOT_CONFIGURED',
+  )
 }
 
 /**
  * Create a Seal access-control policy for a form using the infrastructure wallet.
  *
- * @param formId           The form this policy is associated with.
- * @param authorizedRoles  Roles permitted to decrypt (e.g., ['admin', 'owner']).
- * @returns                The created policy ID.
- * @throws                 WalletError with 'OPERATION_FAILED' on failure.
+ * NOTE: This legacy src/ path has been superseded by the canonical
+ * `apps/api/services/infrastructure-wallet.ts` module.
+ *
+ * @throws WalletError with 'NOT_CONFIGURED' — Seal operations must be migrated
+ *         to apps/api/services/infrastructure-wallet.ts.
  */
 export async function executeSealCreatePolicy(
-  formId: string,
-  authorizedRoles: string[],
+  _formId: string,
+  _authorizedRoles: string[],
 ): Promise<{ policyId: string }> {
-  getInfraWalletKey()
-
-  try {
-    const policy = await createPolicy(formId, authorizedRoles)
-    return { policyId: policy.policyId }
-  } catch (err) {
-    console.error(
-      '[WalletManager] executeSealCreatePolicy failed:',
-      err instanceof Error ? err.message : String(err),
-    )
-    throw new WalletError(
-      'Seal policy creation failed.',
-      'OPERATION_FAILED',
-    )
-  }
+  throw new WalletError(
+    'Seal policy creation is not available in this path. Use apps/api/services/infrastructure-wallet.ts instead.',
+    'NOT_CONFIGURED',
+  )
 }

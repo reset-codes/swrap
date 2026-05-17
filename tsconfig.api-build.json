@@ -1,0 +1,29 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "incremental": false,
+    "module": "Node16",
+    "moduleResolution": "node16",
+    "target": "es2020",
+    "outDir": "dist",
+    "declaration": false,
+    "sourceMap": false
+  },
+  "include": [
+    "apps/api/**/*.ts",
+    "packages/shared/src/**/*.ts",
+    "packages/seal/src/**/*.ts",
+    "packages/walrus/src/**/*.ts",
+    "packages/sui/src/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    ".next",
+    "apps/web/**",
+    "src/**",
+    "**/*.test.ts",
+    "**/*.pbt.test.ts",
+    "**/*.spec.ts"
+  ]
+}

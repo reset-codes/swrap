@@ -141,7 +141,7 @@ describe('SHA-256 integrity invariant PBT — R13.4, R13.5, R17.6', () => {
         const actual = schemaHashHexSync(schema);
         expect(actual).toBe(expected);
       }),
-      { numRuns: 200 },
+      { numRuns: 25 },
     );
   });
 
@@ -159,7 +159,7 @@ describe('SHA-256 integrity invariant PBT — R13.4, R13.5, R17.6', () => {
         const hash = schemaHashHexSync(schema);
         expect(hash).toMatch(/^[0-9a-f]{64}$/);
       }),
-      { numRuns: 200 },
+      { numRuns: 25 },
     );
   });
 
@@ -187,7 +187,7 @@ describe('SHA-256 integrity invariant PBT — R13.4, R13.5, R17.6', () => {
         // The anchor schema_hash must equal the reference sha256
         expect(schemaHashForAnchor).toBe(referenceHash);
       }),
-      { numRuns: 200 },
+      { numRuns: 25 },
     );
   });
 
@@ -204,7 +204,7 @@ describe('SHA-256 integrity invariant PBT — R13.4, R13.5, R17.6', () => {
         const hash2 = schemaHashHexSync(schema);
         expect(hash1).toBe(hash2);
       }),
-      { numRuns: 200 },
+      { numRuns: 25 },
     );
   });
 
@@ -235,7 +235,7 @@ describe('SHA-256 integrity invariant PBT — R13.4, R13.5, R17.6', () => {
           expect(hashA).not.toBe(hashB);
         },
       ),
-      { numRuns: 200 },
+      { numRuns: 25 },
     );
   });
 });

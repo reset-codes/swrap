@@ -3,15 +3,16 @@
 /**
  * FormFillPage — Form_Submission_UI page component.
  *
- * Fetches a form by Blob_ID, decrypts it, renders the fields for filling,
- * and manages the full submit flow.
+ * Fetches form metadata via metadata-client.getForm(), then fetches the
+ * form definition content from Walrus. Manages the full submit flow via
+ * metadata-client.createSubmission().
  *
  * Two state machines:
  *   FetchState: idle | loading | success(formSchema) | error(stage, message)
  *   SubmitState: idle | loading(stage) | success(blobId) | error(stage, message)
  *
  * All five UX_State primitives are rendered explicitly (R19.7).
- * All user-visible strings come from uxCopy.submit (R19.8).
+ * All user-visible strings come from pocCopy.submit (R19.8).
  * Validation failure shows field-level errors without uploading (R12.6).
  * On success: upsertSubmission in Local_Store (R12.4).
  *
@@ -20,7 +21,7 @@
 
 import * as React from 'react';
 import type { FormSchema } from '@poc/shared';
-import { uxCopy, type SubmitLoadingStage, type SubmitErrorStage } from '../copy/ux-copy';
+import { getForm, createSubmission } from '../lib/api/metadata-client';
 import { useLocalStore } from '../stores/local-store';
 import { SubmissionFillFields } from '../components/submissions';
 import { Button, LoadingState } from '../components/ui';
@@ -29,13 +30,68 @@ import { PageHeader } from '../components/layout/PageHeader';
 import { AppShell } from '../components/layout/AppShell';
 
 // ---------------------------------------------------------------------------
+// Walrus aggregator URL helper
+// ---------------------------------------------------------------------------
+
+function getWalrusAggregatorUrl(): string {
+  if (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_WALRUS_AGGREGATOR_URL) {
+    return process.env.NEXT_PUBLIC_WALRUS_AGGREGATOR_URL.replace(/\/+$/, '');
+  }
+  return 'https://aggregator.walrus-testnet.walrus.space';
+}
+
+/**
+ * Fetch raw bytes for a Walrus blob by its blob ID.
+ * Used to retrieve form definition content from Walrus.
+ */
+async function walrusFetchBlob(blobId: string): Promise<Uint8Array> {
+  const base = getWalrusAggregatorUrl();
+  const url = `${base}/v1/blobs/${encodeURIComponent(blobId)}`;
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Walrus fetch failed: ${response.status} ${response.statusText}`);
+  }
+  const buffer = await response.arrayBuffer();
+  return new Uint8Array(buffer);
+}
+
+// ---------------------------------------------------------------------------
+// POC UX copy strings (inlined — apps/web/copy/ux-copy was removed as a
+// duplicate; these pages are legacy POC UI pending migration to the canonical
+// upload state machine flow)
+// ---------------------------------------------------------------------------
+const pocCopy = {
+  fetch: {
+    loading: 'Loading your form…',
+    error: 'Could not load the form. Please check the link and try again.',
+  },
+  submit: {
+    idle: 'Submit',
+    loading: {
+      validating: 'Checking your responses…',
+      securing: 'Securing your response…',
+      uploading: 'Submitting securely…',
+    },
+    success: 'Response submitted successfully.',
+    error: {
+      validating: 'Some responses need attention. Please review and try again.',
+      securing: 'Failed to secure your response. Please try again.',
+      uploading: 'Submission failed. Please check your connection and try again.',
+    },
+  },
+} as const;
+
+type SubmitLoadingStage = keyof typeof pocCopy.submit.loading;
+type SubmitErrorStage = keyof typeof pocCopy.submit.error;
+
+// ---------------------------------------------------------------------------
 // FetchState union — four UX_State primitives for loading the form
 // ---------------------------------------------------------------------------
 
 type FetchState =
   | { status: 'idle' }
   | { status: 'loading' }
-  | { status: 'success'; formSchema: FormSchema }
+  | { status: 'success'; formSchema: FormSchema; formId: string }
   | { status: 'error'; stage: string; message: string };
 
 // ---------------------------------------------------------------------------
@@ -49,57 +105,13 @@ type SubmitState =
   | { status: 'error'; stage: SubmitErrorStage; message: string };
 
 // ---------------------------------------------------------------------------
-// API response shapes
+// Map API error code to SubmitErrorStage
 // ---------------------------------------------------------------------------
 
-interface FetchApiSuccess {
-  form_schema: FormSchema;
-  blob_id: string;
-  schema_hash: string;
-}
-
-interface FetchApiError {
-  error: {
-    code: string;
-    stage: string;
-    message: string;
-  };
-}
-
-interface SubmitApiSuccess {
-  blob_id: string;
-  form_blob_id: string;
-  schema_hash: string;
-  submitted_at: string;
-}
-
-interface SubmitApiError {
-  error: {
-    code: string;
-    stage: string;
-    message: string;
-    details?: { issues?: string[] };
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Map API error stage to SubmitErrorStage
-// ---------------------------------------------------------------------------
-
-function toSubmitErrorStage(apiStage: string): SubmitErrorStage {
-  if (
-    apiStage === 'validating' ||
-    apiStage === 'securing' ||
-    apiStage === 'uploading' ||
-    apiStage === 'validate' ||
-    apiStage === 'encrypt' ||
-    apiStage === 'upload'
-  ) {
-    if (apiStage === 'validate') return 'validating';
-    if (apiStage === 'encrypt') return 'securing';
-    if (apiStage === 'upload') return 'uploading';
-    return apiStage as SubmitErrorStage;
-  }
+function toSubmitErrorStage(apiCode: string): SubmitErrorStage {
+  if (apiCode === 'Validation') return 'validating';
+  if (apiCode === 'Internal' || apiCode === 'BlobNotFound') return 'uploading';
+  if (apiCode === 'Unauthorized' || apiCode === 'Forbidden') return 'securing';
   return 'uploading';
 }
 
@@ -246,34 +258,41 @@ export function FormFillPage({ blobId }: FormFillPageProps) {
       setFetchState({ status: 'loading' });
 
       try {
-        const response = await fetch(`/api/poc/forms/${encodeURIComponent(blobId)}`);
+        // Step 1: Fetch form metadata via canonical metadata-client
+        const metaResult = await getForm(blobId);
 
         if (cancelled) return;
 
-        if (!response.ok) {
-          let stage = 'loading';
-          let message: string = uxCopy.fetch.error;
-
-          try {
-            const errBody = (await response.json()) as FetchApiError;
-            stage = errBody.error?.stage ?? 'loading';
-            message = errBody.error?.message ?? uxCopy.fetch.error;
-          } catch {
-            // JSON parse failed — use defaults
-          }
-
-          setFetchState({ status: 'error', stage, message });
+        if (!metaResult.ok) {
+          setFetchState({
+            status: 'error',
+            stage: 'loading',
+            message: metaResult.error.message ?? pocCopy.fetch.error,
+          });
           return;
         }
 
-        const data = (await response.json()) as FetchApiSuccess;
+        const formRow = metaResult.result;
+
+        // Step 2: Fetch form definition content from Walrus using the blob ID
+        let formSchema: FormSchema;
+        try {
+          const bytes = await walrusFetchBlob(formRow.walrusBlobId);
+          const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+          formSchema = JSON.parse(text) as FormSchema;
+        } catch (walrusErr) {
+          if (cancelled) return;
+          const message = walrusErr instanceof Error ? walrusErr.message : pocCopy.fetch.error;
+          setFetchState({ status: 'error', stage: 'loading', message });
+          return;
+        }
 
         if (cancelled) return;
 
-        setFetchState({ status: 'success', formSchema: data.form_schema });
+        setFetchState({ status: 'success', formSchema, formId: formRow.id });
       } catch (err) {
         if (cancelled) return;
-        const message = err instanceof Error ? err.message : uxCopy.fetch.error;
+        const message = err instanceof Error ? err.message : pocCopy.fetch.error;
         setFetchState({ status: 'error', stage: 'loading', message });
       }
     }
@@ -292,7 +311,7 @@ export function FormFillPage({ blobId }: FormFillPageProps) {
   async function handleSubmit() {
     if (fetchState.status !== 'success') return;
 
-    const { formSchema } = fetchState;
+    const { formSchema, formId } = fetchState;
 
     // Clear previous errors
     setFieldErrors({});
@@ -307,7 +326,7 @@ export function FormFillPage({ blobId }: FormFillPageProps) {
       setSubmitState({
         status: 'error',
         stage: 'validating',
-        message: uxCopy.submit.error.validating,
+        message: pocCopy.submit.error.validating,
       });
       return;
     }
@@ -316,43 +335,42 @@ export function FormFillPage({ blobId }: FormFillPageProps) {
     setSubmitState({ status: 'loading', stage: 'securing' });
 
     try {
-      // Uploading stage — transition before the actual fetch
+      // Uploading stage — transition before the actual API call
       setSubmitState({ status: 'loading', stage: 'uploading' });
 
-      const response = await fetch('/api/poc/submissions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ form_blob_id: blobId, answers }),
-      });
+      // Use the canonical metadata-client to create the submission.
+      // The API_Server handles encryption (for private forms) and Walrus storage.
+      // Session token is empty string for now (auth session wired in a later task).
+      const result = await createSubmission(
+        {
+          formId,
+          formVersion: 1,
+          submitterAddress: '', // populated by auth session in a later task
+          privacyMode: 'public', // default to public for legacy POC flow
+          payload: JSON.stringify(answers),
+        },
+        '', // session token — wired in auth task
+      );
 
-      if (!response.ok) {
-        let stage: SubmitErrorStage = 'uploading';
-        let message: string = uxCopy.submit.error.uploading;
-
-        try {
-          const errBody = (await response.json()) as SubmitApiError;
-          stage = toSubmitErrorStage(errBody.error?.stage ?? '');
-          message = errBody.error?.message ?? String(uxCopy.submit.error[stage]);
-        } catch {
-          // JSON parse failed — use defaults
-        }
-
+      if (!result.ok) {
+        const stage = toSubmitErrorStage(result.error.code);
+        const message = result.error.message ?? String(pocCopy.submit.error[stage]);
         setSubmitState({ status: 'error', stage, message });
         return;
       }
 
-      const data = (await response.json()) as SubmitApiSuccess;
+      const submissionRow = result.result;
 
       // Persist to Local_Store (R12.4)
       useLocalStore.getState().upsertSubmission({
-        blobId: data.blob_id,
-        formBlobId: data.form_blob_id,
-        submittedAt: data.submitted_at,
+        blobId: submissionRow.walrusBlobId,
+        formBlobId: blobId,
+        submittedAt: submissionRow.createdAt,
       });
 
-      setSubmitState({ status: 'success', blobId: data.blob_id });
+      setSubmitState({ status: 'success', blobId: submissionRow.walrusBlobId });
     } catch (err) {
-      const message = err instanceof Error ? err.message : uxCopy.submit.error.uploading;
+      const message = err instanceof Error ? err.message : pocCopy.submit.error.uploading;
       setSubmitState({ status: 'error', stage: 'uploading', message });
     }
   }
@@ -367,7 +385,7 @@ export function FormFillPage({ blobId }: FormFillPageProps) {
       <AppShell>
         <ContentFrame>
           <div className="flex items-center justify-center py-24">
-            <LoadingState mode="block" label={uxCopy.fetch.loading} />
+            <LoadingState mode="block" label={pocCopy.fetch.loading} />
           </div>
         </ContentFrame>
       </AppShell>
@@ -390,7 +408,7 @@ export function FormFillPage({ blobId }: FormFillPageProps) {
               className="rounded-md border border-status-error bg-status-error-bg p-4"
             >
               <p className="text-token-sm font-medium text-status-error">
-                {uxCopy.fetch.error}
+                {pocCopy.fetch.error}
               </p>
               {fetchState.stage && fetchState.stage !== 'loading' && (
                 <p className="mt-1 text-token-xs text-status-error opacity-75">
@@ -412,7 +430,7 @@ export function FormFillPage({ blobId }: FormFillPageProps) {
           <div className="flex items-center justify-center py-24">
             <LoadingState
               mode="block"
-              label={uxCopy.submit.loading[submitState.stage]}
+              label={pocCopy.submit.loading[submitState.stage]}
             />
           </div>
         </ContentFrame>
@@ -436,7 +454,7 @@ export function FormFillPage({ blobId }: FormFillPageProps) {
               className="rounded-md border border-status-success bg-status-success-bg p-6 flex flex-col gap-3"
             >
               <p className="text-token-base font-medium text-status-success">
-                {uxCopy.submit.success}
+                {pocCopy.submit.success}
               </p>
               <p className="text-token-sm text-text-secondary font-mono">
                 Submission ID: {submitState.blobId}
@@ -497,9 +515,9 @@ export function FormFillPage({ blobId }: FormFillPageProps) {
               size="md"
               onClick={handleSubmit}
               disabled={isSubmitting}
-              aria-label={uxCopy.submit.idle}
+              aria-label={pocCopy.submit.idle}
             >
-              {uxCopy.submit.idle}
+              {pocCopy.submit.idle}
             </Button>
           </div>
         </div>
