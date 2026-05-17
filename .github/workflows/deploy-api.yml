@@ -111,7 +111,9 @@ jobs:
             echo ""
             echo "▶ Building and deploying containers..."
             docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" \
-              up -d --build --remove-orphans
+              build --build-arg COMMIT_SHA="$COMMIT_SHA"
+            docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" \
+              up -d --remove-orphans
 
             # ── Run database migrations ──────────────────────────────────────
             echo ""

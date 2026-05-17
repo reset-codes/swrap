@@ -41,6 +41,8 @@ export interface HealthCheckResponse {
     infraWallet: 'ok' | 'missing';
   };
   timestamp: string;
+  /** Git commit SHA baked in at Docker build time via COMMIT_SHA build-arg. */
+  commit: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -113,6 +115,9 @@ export function healthRouter(config: ServerConfig): Router {
         infraWallet: infraWalletStatus,
       },
       timestamp: new Date().toISOString(),
+      // Injected at Docker build time via COMMIT_SHA build-arg.
+      // Falls back to 'unknown' if the image was built without the arg (e.g. local dev).
+      commit: process.env.COMMIT_SHA ?? 'unknown',
     };
 
     // HTTP 200 when healthy, 503 when any check fails.

@@ -24,6 +24,11 @@ FROM node:22-alpine AS runtime
 
 WORKDIR /app
 
+# Git commit SHA passed in at build time so the /health endpoint can report it.
+# Usage: docker build --build-arg COMMIT_SHA=$(git rev-parse HEAD) ...
+ARG COMMIT_SHA=unknown
+ENV COMMIT_SHA=${COMMIT_SHA}
+
 # Copy everything needed to run tsx at runtime
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
