@@ -83,8 +83,8 @@ export function createApp(config: ServerConfig): Express {
   app.use('/health', healthRouter(config));
 
   // ── Auth routes (no API_SECRET_KEY required — use session tokens) ─────────
-  app.use('/auth', authRouter());
-  app.use('/me', meRouter());
+  app.use('/api/auth', authRouter());
+  app.use('/api/me', meRouter());
 
   // ── 7. Auth verify ────────────────────────────────────────────────────────
   // Admin routes require API_SECRET_KEY bearer token

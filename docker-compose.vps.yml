@@ -1,0 +1,131 @@
+# =============================================================================
+# Swrap — VPS API Deployment (api.swrap.tech)
+#
+# Deploys only the API backend + PostgreSQL + Nginx on the VPS.
+# The frontend is deployed separately on Vercel.
+#
+# Target: VPS at 168.144.95.178 (api.swrap.tech)
+#
+# Usage:
+#   cp .env.deploy.example .env.deploy
+#   # Fill in all values in .env.deploy
+#   docker compose -f docker-compose.vps.yml --env-file .env.deploy up -d
+#
+# First-time setup:
+#   1. SSH into VPS: ssh root@168.144.95.178
+#   2. Install Docker + Docker Compose
+#   3. Clone repo and cd into it
+#   4. Obtain TLS cert: certbot certonly --standalone -d api.swrap.tech
+#   5. Copy .env.deploy.example → .env.deploy, fill in values
+#   6. Run: docker compose -f docker-compose.vps.yml --env-file .env.deploy up -d
+#   7. Run migrations: docker compose -f docker-compose.vps.yml exec api npx node-pg-migrate up --migrations-dir db/migrations --database-url-var DATABASE_URL
+# =============================================================================
+
+networks:
+  swrap_internal:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+
+services:
+
+  # ── PostgreSQL metadata store ─────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    networks:
+      - swrap_internal
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-initdb.d:ro
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-swrap}
+      POSTGRES_USER: ${POSTGRES_USER:-swrap}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-swrap} -d ${POSTGRES_DB:-swrap}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Express API server ────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    networks:
+      - swrap_internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-swrap}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-swrap}
+      INFRASTRUCTURE_WALLET_SECRET: ${INFRASTRUCTURE_WALLET_SECRET}
+      WALRUS_PUBLISHER_URL: ${WALRUS_PUBLISHER_URL}
+      WALRUS_AGGREGATOR_URL: ${WALRUS_AGGREGATOR_URL}
+      SUI_RPC_URL: ${SUI_RPC_URL}
+      SESSION_SECRET: ${SESSION_SECRET}
+      API_CORS_ORIGINS: ${API_CORS_ORIGINS}
+      API_SECRET_KEY: ${API_SECRET_KEY}
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/health | grep -q '\"status\":\"ok\"' || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ── Nginx reverse proxy + TLS termination ─────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    networks:
+      - swrap_internal
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      api:
+        condition: service_healthy
+    volumes:
+      - ./nginx/api.swrap.tech.conf:/etc/nginx/conf.d/default.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /var/www/certbot:/var/www/certbot:ro
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    healthcheck:
+      test: ["CMD-SHELL", "nginx -t 2>/dev/null && pgrep nginx > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

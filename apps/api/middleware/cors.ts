@@ -15,6 +15,7 @@ import type { ServerConfig } from '../server-config';
 
 const ALLOWED_METHODS = 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS';
 const ALLOWED_HEADERS = 'Content-Type,Authorization,X-Request-ID';
+const EXPOSE_HEADERS = 'X-Request-ID';
 
 export function corsMiddleware(config: ServerConfig) {
   // Reject wildcard origins at middleware construction time — fail fast
@@ -38,6 +39,8 @@ export function corsMiddleware(config: ServerConfig) {
       res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Access-Control-Allow-Methods', ALLOWED_METHODS);
       res.setHeader('Access-Control-Allow-Headers', ALLOWED_HEADERS);
+      res.setHeader('Access-Control-Expose-Headers', EXPOSE_HEADERS);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
       res.setHeader('Vary', 'Origin');
     }
 

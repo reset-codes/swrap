@@ -1,0 +1,51 @@
+# Dependencies (will be installed fresh in container)
+node_modules
+
+# Build outputs
+.next
+out
+build
+dist
+
+# Environment files (secrets — never bake into images)
+.env
+.env.local
+.env.deploy
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Version control
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage
+*.test.ts
+*.pbt.test.ts
+
+# Documentation (not needed in runtime image)
+*.md
+!README.md
+
+# Deployment scripts (not needed inside containers)
+deploy/
+
+# Vercel
+.vercel
+vercel.json
+
+# Misc
+.prettierrc
+.prettierignore
+.eslintrc.json

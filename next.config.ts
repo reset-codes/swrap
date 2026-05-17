@@ -4,8 +4,9 @@ const nextConfig: NextConfig = {
   // Enable React strict mode for better development experience
   reactStrictMode: true,
 
-  // Standalone output — required for VPS Docker deployment (apps/web/Dockerfile)
-  output: 'standalone',
+  // NOTE: output: 'standalone' is NOT needed for Vercel deployment.
+  // If you need Docker deployment (apps/web/Dockerfile), uncomment:
+  // output: 'standalone',
 
   // Exclude firebase-admin from webpack bundling (Node.js-only, not Edge-compatible)
   serverExternalPackages: ['firebase-admin'],
