@@ -21,6 +21,14 @@
   ],
   "rewrites": [
     {
+      "source": "/api/auth/:path*",
+      "destination": "/api/auth/:path*"
+    },
+    {
+      "source": "/api/poc/:path*",
+      "destination": "/api/poc/:path*"
+    },
+    {
       "source": "/api/:path*",
       "destination": "https://api.swrap.tech/api/:path*"
     }
