@@ -176,11 +176,26 @@ export async function createForm(
   // Generate Seal policy if encryption is enabled
   let sealPolicyId: string | undefined = undefined
   if (input.encryptionMode !== 'none') {
-    // NOTE: Seal policy creation has been migrated to apps/api/services/infrastructure-wallet.ts.
-    // This legacy src/ path throws until the form creation flow is migrated to the canonical API.
-    const { executeSealCreatePolicy } = await import('@/lib/wallet/manager')
-    const policy = await executeSealCreatePolicy(formId, ['admin', 'owner'])
-    sealPolicyId = policy.policyId
+    // Seal policy creation is not yet available in this path (legacy stub throws).
+    // In development, we generate a placeholder policy ID so form creation can
+    // proceed. In production, this will be replaced by the canonical
+    // apps/api/services/infrastructure-wallet.ts Seal integration.
+    try {
+      const { executeSealCreatePolicy } = await import('@/lib/wallet/manager')
+      const policy = await executeSealCreatePolicy(formId, ['admin', 'owner'])
+      sealPolicyId = policy.policyId
+    } catch {
+      // Seal not available — use a deterministic placeholder in dev
+      if (process.env.NODE_ENV === 'development' || process.env.DEV_BYPASS_STORAGE === 'true') {
+        sealPolicyId = `seal-policy-${formId}`
+      } else {
+        throw new ServiceError(
+          'Encryption service is not available. Please try again later.',
+          'SEAL_UNAVAILABLE',
+          503,
+        )
+      }
+    }
   }
 
   const fields: FieldConfig[] = input.fields.map((f, index) => ({
@@ -226,12 +241,23 @@ export async function createForm(
       'application/json',
     )
     blobId = result.blobId
-  } catch {
-    throw new ServiceError(
-      'Failed to store form schema on Walrus. Please try again.',
-      'WALRUS_WRITE_FAILED',
-      503,
-    )
+  } catch (walrusErr) {
+    // In development with DEV_BYPASS_STORAGE, generate a placeholder blob ID
+    // so form creation can proceed even when Walrus testnet is unreachable.
+    if (process.env.DEV_BYPASS_STORAGE === 'true') {
+      const { createHash } = await import('node:crypto')
+      blobId = `dev-blob-${createHash('sha256').update(jsonString).digest('hex').slice(0, 16)}`
+      console.warn(
+        `[FormService] Walrus write failed in dev mode, using placeholder blob ID: ${blobId}`,
+        walrusErr instanceof Error ? walrusErr.message : String(walrusErr),
+      )
+    } else {
+      throw new ServiceError(
+        'Failed to store form schema on Walrus. Please try again.',
+        'WALRUS_WRITE_FAILED',
+        503,
+      )
+    }
   }
 
   // ── Step 6 & 7: Index in PostgreSQL + BlobReference ──────────────────────
@@ -353,10 +379,23 @@ export async function updateForm(
   const newEncryptionMode = input.encryptionMode ?? currentSchema.encryptionMode
   
   if (newEncryptionMode !== 'none' && !sealPolicyId) {
-    // NOTE: Seal policy creation has been migrated to apps/api/services/infrastructure-wallet.ts.
-    const { executeSealCreatePolicy } = await import('@/lib/wallet/manager')
-    const policy = await executeSealCreatePolicy(existing.id, ['admin', 'owner'])
-    sealPolicyId = policy.policyId
+    // Seal policy creation is not yet available in this path (legacy stub throws).
+    // In development, we generate a placeholder policy ID.
+    try {
+      const { executeSealCreatePolicy } = await import('@/lib/wallet/manager')
+      const policy = await executeSealCreatePolicy(existing.id, ['admin', 'owner'])
+      sealPolicyId = policy.policyId
+    } catch {
+      if (process.env.NODE_ENV === 'development' || process.env.DEV_BYPASS_STORAGE === 'true') {
+        sealPolicyId = `seal-policy-${existing.id}`
+      } else {
+        throw new ServiceError(
+          'Encryption service is not available. Please try again later.',
+          'SEAL_UNAVAILABLE',
+          503,
+        )
+      }
+    }
   }
 
   const updatedSchema: FormSchema = {
@@ -394,11 +433,20 @@ export async function updateForm(
     )
     newBlobId = result.blobId
   } catch {
-    throw new ServiceError(
-      'Failed to store updated form schema on Walrus. Please try again.',
-      'WALRUS_WRITE_FAILED',
-      503,
-    )
+    // In development with DEV_BYPASS_STORAGE, generate a placeholder blob ID
+    if (process.env.DEV_BYPASS_STORAGE === 'true') {
+      const { createHash } = await import('node:crypto')
+      newBlobId = `dev-blob-${createHash('sha256').update(jsonString).digest('hex').slice(0, 16)}`
+      console.warn(
+        `[FormService] Walrus write failed in dev mode, using placeholder blob ID: ${newBlobId}`,
+      )
+    } else {
+      throw new ServiceError(
+        'Failed to store updated form schema on Walrus. Please try again.',
+        'WALRUS_WRITE_FAILED',
+        503,
+      )
+    }
   }
 
   // ── Update schemaBlobId in PostgreSQL + new BlobReference ─────────────────

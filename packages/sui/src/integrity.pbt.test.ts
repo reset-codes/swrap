@@ -63,7 +63,7 @@ function nonEmptyStringArb(maxLength: number): fc.Arbitrary<string> {
 /**
  * Arbitrary for a valid PocField.
  */
-const pocFieldArb: fc.Arbitrary<PocField> = fieldTypeArb.chain((type) => {
+const pocFieldArb: fc.Arbitrary<PocField> = fc.tuple(fieldTypeArb, fc.uuid()).chain(([type, id]) => {
   if (type === 'select') {
     return fc
       .record({
@@ -76,7 +76,7 @@ const pocFieldArb: fc.Arbitrary<PocField> = fieldTypeArb.chain((type) => {
         ),
       })
       .map((f) => {
-        const result: PocField = { type: f.type, label: f.label };
+        const result: PocField = { id, type: f.type, label: f.label };
         if (f.required !== undefined) result.required = f.required;
         if (f.options !== undefined) result.options = f.options;
         return result;
@@ -90,7 +90,7 @@ const pocFieldArb: fc.Arbitrary<PocField> = fieldTypeArb.chain((type) => {
       required: fc.option(fc.boolean(), { nil: undefined }),
     })
     .map((f) => {
-      const result: PocField = { type: f.type, label: f.label };
+      const result: PocField = { id, type: f.type, label: f.label };
       if (f.required !== undefined) result.required = f.required;
       return result;
     });

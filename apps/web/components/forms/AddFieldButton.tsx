@@ -20,12 +20,15 @@ import { Plus } from 'lucide-react';
 
 /** Human-readable labels for each field type. */
 const FIELD_TYPE_LABELS: Record<FieldType, string> = {
-  text:     'Short text',
-  textarea: 'Long text',
-  email:    'Email',
-  number:   'Number',
-  select:   'Dropdown',
-  checkbox: 'Checkbox',
+  text:           'Short text',
+  textarea:       'Long text',
+  email:          'Email',
+  number:         'Number',
+  select:         'Dropdown',
+  checkbox:       'Checkbox',
+  url:            'URL',
+  star_rating:    'Star rating',
+  wallet_address: 'Wallet address',
 };
 
 export interface AddFieldButtonProps {

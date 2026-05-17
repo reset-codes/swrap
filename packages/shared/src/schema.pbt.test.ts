@@ -43,43 +43,53 @@ function nonEmptyStringArb(maxLength: number): fc.Arbitrary<string> {
 }
 
 /**
+ * Arbitrary for a valid UUID v4 string using fast-check's built-in uuid generator.
+ */
+const uuidArb: fc.Arbitrary<string> = fc.uuid();
+
+/**
  * Arbitrary for a valid PocField.
+ * - id: UUID v4 (now required)
  * - type: one of FIELD_TYPES
  * - label: 1–100 chars
  * - required: optional boolean
  * - options: only present for 'select' type, array of non-empty strings
  */
-const pocFieldArb: fc.Arbitrary<PocField> = fieldTypeArb.chain((type) => {
-  const baseField = fc.record({
-    type: fc.constant(type),
-    label: nonEmptyStringArb(100),
-    required: fc.option(fc.boolean(), { nil: undefined }),
-  });
-
-  if (type === 'select') {
-    return fc.record({
-      type: fc.constant(type as 'select'),
+const pocFieldArb: fc.Arbitrary<PocField> = fc
+  .tuple(fieldTypeArb, uuidArb)
+  .chain(([type, id]) => {
+    const baseField = fc.record({
+      type: fc.constant(type),
       label: nonEmptyStringArb(100),
       required: fc.option(fc.boolean(), { nil: undefined }),
-      options: fc.option(
-        fc.array(nonEmptyStringArb(50), { minLength: 1, maxLength: 10 }),
-        { nil: undefined },
-      ),
-    }).map((f) => {
-      // Remove undefined keys to keep the object clean
-      const result: PocField = { type: f.type, label: f.label };
+    });
+
+    if (type === 'select') {
+      return fc
+        .record({
+          type: fc.constant(type as 'select'),
+          label: nonEmptyStringArb(100),
+          required: fc.option(fc.boolean(), { nil: undefined }),
+          options: fc.option(
+            fc.array(nonEmptyStringArb(50), { minLength: 1, maxLength: 10 }),
+            { nil: undefined },
+          ),
+        })
+        .map((f) => {
+          // Remove undefined keys to keep the object clean
+          const result: PocField = { id, type: f.type, label: f.label };
+          if (f.required !== undefined) result.required = f.required;
+          if (f.options !== undefined) result.options = f.options;
+          return result;
+        });
+    }
+
+    return baseField.map((f) => {
+      const result: PocField = { id, type: f.type, label: f.label };
       if (f.required !== undefined) result.required = f.required;
-      if (f.options !== undefined) result.options = f.options;
       return result;
     });
-  }
-
-  return baseField.map((f) => {
-    const result: PocField = { type: f.type, label: f.label };
-    if (f.required !== undefined) result.required = f.required;
-    return result;
   });
-});
 
 /**
  * Arbitrary for a valid ISO datetime string.

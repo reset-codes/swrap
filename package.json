@@ -23,7 +23,7 @@
     "migrate:create": "node-pg-migrate create --migrations-dir db/migrations",
     "api:dev": "tsx apps/api/server.ts",
     "api:build": "docker build -f apps/api/Dockerfile -t swrap-api .",
-    "deploy:vps": "ssh root@168.144.95.178 'cd /opt/swrap && git pull && ./deploy/deploy.sh'"
+    "deploy:vps": "ssh deploy@168.144.95.178 'cd /opt/swrap && ./deploy/deploy.sh'"
   },
   "prisma": {
     "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"

@@ -26,15 +26,15 @@ function ShellContent({ children, user }: DashboardShellProps) {
         Skip to content
       </a>
 
-      {/* ── Desktop Sidebar ─────────────────────────────────────────────── */}
-      <div className="hidden lg:flex lg:flex-col">
+      {/* ── Desktop Sidebar — always visible on md+ (at least collapsed) ── */}
+      <div className="hidden md:flex md:flex-col">
         <Sidebar user={user} />
       </div>
 
       {/* ── Main area ────────────────────────────────────────────────────── */}
       <div className="flex flex-1 flex-col overflow-hidden relative">
         {/* Mobile top bar — shows hamburger + wordmark on small screens */}
-        <div className="flex h-14 items-center gap-3 border-b border-border bg-surface px-4 lg:hidden">
+        <div className="flex h-14 items-center gap-3 border-b border-border bg-surface px-4 md:hidden">
           <MobileSidebarToggle />
           <span className="text-h3 font-semibold tracking-tight text-text-primary">Swrap</span>
         </div>

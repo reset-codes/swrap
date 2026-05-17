@@ -11,8 +11,8 @@ interface SidebarContextType {
 const SidebarContext = createContext<SidebarContextType | undefined>(undefined);
 
 export function SidebarProvider({ children }: { children: React.ReactNode }) {
-  // Default to open on desktop
-  const [isOpen, setIsOpen] = useState(true);
+  // Default to collapsed on desktop — shows icon rail without taking too much space
+  const [isOpen, setIsOpen] = useState(false);
 
   // Persistence in localStorage
   useEffect(() => {

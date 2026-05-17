@@ -28,6 +28,28 @@
                                    └──────────────────────┘
 ```
 
+## CI/CD Pipeline
+
+```
+Local Machine
+    │ git push
+    ▼
+GitHub (private repo)
+    │ push to main (paths: apps/api/**, packages/**, db/**)
+    ▼
+GitHub Actions
+    ├── 1. Type check (tsc --noEmit)
+    ├── 2. Run tests (vitest run)
+    │       ↓ (must pass)
+    └── 3. SSH into VPS as 'deploy' user
+            ├── git fetch + reset to target commit
+            ├── docker compose up --build
+            ├── Run database migrations
+            ├── Health check (12 retries × 5s)
+            ├── ✓ Success → deployment complete
+            └── ✗ Failure → auto-rollback to previous commit
+```
+
 ## DNS Configuration
 
 | Record | Type | Value |
@@ -37,37 +59,56 @@
 
 ---
 
-## VPS Deployment (api.swrap.tech)
+## SSH Key Architecture
 
-### Prerequisites
+Three separate keys with distinct purposes:
 
-- Ubuntu 22.04+ VPS at 168.144.95.178
-- DNS A record: `api.swrap.tech` → `168.144.95.178`
-- SSH access as root
+| Key | Purpose | Location |
+|-----|---------|----------|
+| Personal SSH key | You → GitHub (push code) | `~/.ssh/id_ed25519` on your machine |
+| CI/CD SSH key | GitHub Actions → VPS (deploy) | GitHub Secret `VPS_SSH_PRIVATE_KEY` |
+| Deploy key | VPS → GitHub (pull code) | `/home/deploy/.ssh/github_deploy_key` on VPS |
 
-### 1. Initial VPS Setup
+**Never reuse keys across purposes.**
+
+---
+
+## Initial VPS Setup
+
+### 1. Run Base Setup
 
 ```bash
-# From your local machine — run the setup script on the VPS
 ssh root@168.144.95.178 'bash -s' < deploy/setup-vps.sh
 ```
 
-This installs Docker, Certbot, configures the firewall, creates swap, and obtains the TLS certificate.
-
-### 2. Clone and Configure
+### 2. Create Deploy User
 
 ```bash
-ssh root@168.144.95.178
-
-cd /opt/swrap
-git clone <your-repo-url> .
-
-# Create production environment file
-cp .env.deploy.example .env.deploy
-nano .env.deploy  # Fill in all values
+ssh root@168.144.95.178 'bash -s' < deploy/setup-deploy-user.sh
 ```
 
-**Required values in `.env.deploy`:**
+Follow the printed instructions to:
+- Add the deploy key to GitHub (repo → Settings → Deploy Keys)
+- Generate and configure the CI/CD SSH key
+- Add GitHub Secrets
+
+### 3. Clone Repo (as deploy user)
+
+```bash
+ssh deploy@168.144.95.178
+cd /opt/swrap
+git clone git@github.com:YOUR_USERNAME/swrap.git .
+```
+
+### 4. Configure Environment
+
+```bash
+cp .env.deploy.example .env.deploy
+nano .env.deploy  # Fill in all values
+chmod 600 .env.deploy
+```
+
+**Required values:**
 
 | Variable | How to generate |
 |----------|----------------|
@@ -77,36 +118,71 @@ nano .env.deploy  # Fill in all values
 | `API_SECRET_KEY` | `openssl rand -base64 32` |
 | `API_CORS_ORIGINS` | `https://swrap.tech,https://www.swrap.tech` |
 
-### 3. Deploy
+### 5. First Deploy
 
 ```bash
-# First deployment
-docker compose -f docker-compose.vps.yml --env-file .env.deploy up -d --build
-
-# Run database migrations
-docker compose -f docker-compose.vps.yml --env-file .env.deploy exec api \
-    npx node-pg-migrate up --migrations-dir db/migrations --database-url-var DATABASE_URL
-
-# Verify
-curl https://api.swrap.tech/health
-```
-
-### 4. Subsequent Deployments
-
-```bash
-cd /opt/swrap
 ./deploy/deploy.sh
 ```
 
-Or from your local machine:
+---
+
+## GitHub Secrets Required
+
+Set in: Repo → Settings → Secrets and Variables → Actions
+
+| Secret | Value |
+|--------|-------|
+| `VPS_HOST` | `168.144.95.178` |
+| `VPS_USER` | `deploy` |
+| `VPS_SSH_PRIVATE_KEY` | Contents of `~/.ssh/swrap_github_actions` |
+
+---
+
+## Day-to-Day Operations
+
+### Automatic Deployment
+
+Push to `main` with changes in `apps/api/**`, `packages/**`, `db/**`, or `docker-compose.vps.yml` → automatic deploy.
+
+### Manual Deploy (from local)
+
 ```bash
-ssh root@168.144.95.178 'cd /opt/swrap && git pull && ./deploy/deploy.sh'
+ssh deploy@168.144.95.178 'cd /opt/swrap && ./deploy/deploy.sh'
 ```
 
-### Useful Commands
+Or use the npm script:
+```bash
+npm run deploy:vps
+```
+
+### Emergency Deploy (skip tests)
+
+Use the GitHub Actions "Run workflow" button with `skip_tests: true`.
+
+### Check Status
 
 ```bash
-# View logs
+ssh deploy@168.144.95.178 'cd /opt/swrap && ./deploy/deploy.sh --status'
+```
+
+### View Logs
+
+```bash
+ssh deploy@168.144.95.178 'cd /opt/swrap && ./deploy/deploy.sh --logs'
+```
+
+### Manual Rollback
+
+```bash
+ssh deploy@168.144.95.178 'cd /opt/swrap && ./deploy/deploy.sh --rollback'
+```
+
+---
+
+## Useful Docker Commands
+
+```bash
+# View logs (follow)
 docker compose -f docker-compose.vps.yml logs -f api
 docker compose -f docker-compose.vps.yml logs -f postgres
 docker compose -f docker-compose.vps.yml logs -f nginx
@@ -140,61 +216,69 @@ docker compose -f docker-compose.vps.yml exec postgres psql -U swrap -d swrap
 
 ### 2. Environment Variables
 
-Set these in Vercel Dashboard → Project Settings → Environment Variables:
+Set in Vercel Dashboard → Project Settings → Environment Variables:
 
-| Variable | Value | Notes |
-|----------|-------|-------|
-| `NEXT_PUBLIC_APP_URL` | `https://swrap.tech` | Your frontend domain |
-| `NEXT_PUBLIC_API_URL` | `https://api.swrap.tech` | VPS API URL |
-| `NEXT_PUBLIC_FIREBASE_API_KEY` | Your Firebase key | Public, safe to expose |
-| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | `your-project.firebaseapp.com` | |
-| `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | Your project ID | |
-| `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | `your-project.appspot.com` | |
-| `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | Your sender ID | |
-| `NEXT_PUBLIC_FIREBASE_APP_ID` | Your app ID | |
-| `NEXTAUTH_URL` | `https://swrap.tech` | |
-| `NEXTAUTH_SECRET` | Generate with `openssl rand -base64 32` | |
-| `FIREBASE_SERVICE_ACCOUNT_KEY` | Full JSON string | Server-side only |
-| `DATABASE_URL` | `postgresql://swrap:<pass>@168.144.95.178:5432/swrap` | Only if needed |
+| Variable | Value |
+|----------|-------|
+| `NEXT_PUBLIC_APP_URL` | `https://swrap.tech` |
+| `NEXT_PUBLIC_API_URL` | `https://api.swrap.tech` |
+| `NEXT_PUBLIC_FIREBASE_API_KEY` | Your Firebase key |
+| `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` | `your-project.firebaseapp.com` |
+| `NEXT_PUBLIC_FIREBASE_PROJECT_ID` | Your project ID |
+| `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` | `your-project.appspot.com` |
+| `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | Your sender ID |
+| `NEXT_PUBLIC_FIREBASE_APP_ID` | Your app ID |
+| `NEXTAUTH_URL` | `https://swrap.tech` |
+| `NEXTAUTH_SECRET` | `openssl rand -base64 32` |
+| `FIREBASE_SERVICE_ACCOUNT_KEY` | Full JSON string |
 
-### 3. Domain Configuration
+### 3. Deploy
 
-In Vercel Dashboard → Project Settings → Domains:
-- Add `swrap.tech`
-- Add `www.swrap.tech` (redirects to `swrap.tech`)
-
-### 4. Deploy
-
-Vercel auto-deploys on every push to `main`. For manual deploys:
-```bash
-npx vercel --prod
-```
+Vercel auto-deploys on every push to `main`.
 
 ---
 
-## API Routing Strategy
+## Security Hardening
 
-The `vercel.json` includes a rewrite rule:
-```json
-{
-  "rewrites": [
-    { "source": "/api/:path*", "destination": "https://api.swrap.tech/:path*" }
-  ]
-}
+### Firewall (UFW)
+
+```bash
+sudo ufw status          # Check current rules
+sudo ufw allow 22/tcp   # SSH
+sudo ufw allow 80/tcp   # HTTP (ACME + redirect)
+sudo ufw allow 443/tcp  # HTTPS
+sudo ufw enable
 ```
 
-This means the frontend can call `/api/forms` and it gets proxied to `https://api.swrap.tech/forms`. This avoids CORS issues for simple requests and provides a clean URL structure.
+### Fail2Ban
 
-The frontend code also supports direct API calls via `NEXT_PUBLIC_API_URL` for cases where you want the browser to call the API directly (e.g., for WebSocket connections or large uploads).
+```bash
+sudo apt install fail2ban -y
+sudo systemctl enable fail2ban
+```
+
+### SSH Hardening
+
+Edit `/etc/ssh/sshd_config`:
+```
+PermitRootLogin no          # After deploy user is confirmed working
+PasswordAuthentication no   # Key-only access
+MaxAuthTries 3
+```
+
+### Docker Security
+
+- Non-root user inside containers (already configured in Dockerfile)
+- Resource limits on containers (already in docker-compose.vps.yml)
+- No exposed ports except 80/443 via Nginx
 
 ---
 
 ## TLS Certificate Renewal
 
-Certbot auto-renewal is configured via cron on the VPS. To manually renew:
+Auto-renewal is configured via cron. To manually renew:
 
 ```bash
-# On VPS
 certbot renew
 docker compose -f docker-compose.vps.yml exec nginx nginx -s reload
 ```
@@ -209,23 +293,51 @@ docker compose -f docker-compose.vps.yml exec nginx nginx -s reload
 curl https://api.swrap.tech/health
 ```
 
-Expected response:
+Expected:
 ```json
-{
-  "status": "ok",
-  "checks": {
-    "db": "ok",
-    "infraWallet": "ok"
-  },
-  "timestamp": "2026-05-17T..."
-}
+{"status":"ok","checks":{"db":"ok","infraWallet":"ok"},"timestamp":"..."}
 ```
 
-### Uptime Monitoring
+### Recommended External Monitoring
 
-Set up an external monitor (UptimeRobot, Better Uptime, etc.) to ping:
+- [UptimeRobot](https://uptimerobot.com) — free tier, 5-min checks
+- [Better Stack](https://betterstack.com) — incident management + status page
+
+Monitor:
 - `https://api.swrap.tech/health` — API health
 - `https://swrap.tech` — Frontend availability
+
+### Deployment History
+
+```bash
+cat /opt/swrap/deploy/history.log
+```
+
+---
+
+## Disaster Recovery
+
+### Database Backup
+
+```bash
+# Manual backup
+docker compose -f docker-compose.vps.yml exec postgres \
+  pg_dump -U swrap -d swrap > backup_$(date +%Y%m%d_%H%M%S).sql
+
+# Restore
+cat backup.sql | docker compose -f docker-compose.vps.yml exec -T postgres \
+  psql -U swrap -d swrap
+```
+
+### Full Recovery Steps
+
+1. Provision new VPS
+2. Run `setup-vps.sh`
+3. Run `setup-deploy-user.sh`
+4. Clone repo, configure `.env.deploy`
+5. Restore database from backup
+6. Update DNS A record
+7. Run `deploy.sh`
 
 ---
 
@@ -240,16 +352,24 @@ docker compose -f docker-compose.vps.yml logs api
 ### Database connection failed
 ```bash
 docker compose -f docker-compose.vps.yml exec postgres pg_isready -U swrap
-# If not ready, check postgres logs
 docker compose -f docker-compose.vps.yml logs postgres
 ```
 
 ### TLS certificate issues
 ```bash
-certbot certificates  # Check cert status
-certbot renew --dry-run  # Test renewal
+certbot certificates
+certbot renew --dry-run
 ```
 
-### CORS errors in browser
+### CORS errors
 - Verify `API_CORS_ORIGINS` in `.env.deploy` includes your Vercel domain
-- Check: `curl -H "Origin: https://swrap.tech" -I https://api.swrap.tech/health`
+- Test: `curl -H "Origin: https://swrap.tech" -I https://api.swrap.tech/health`
+
+### Deployment stuck
+```bash
+# Check what's running
+docker ps
+# Force restart
+docker compose -f docker-compose.vps.yml down
+docker compose -f docker-compose.vps.yml --env-file .env.deploy up -d --build
+```

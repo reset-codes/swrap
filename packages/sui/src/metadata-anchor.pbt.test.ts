@@ -122,7 +122,7 @@ const fieldTypeArb = fc.constantFrom(...FIELD_TYPES);
  * Arbitrary for a valid PocField with a label of at least 17 chars
  * (to avoid coincidental collisions with short strings in the hash).
  */
-const pocFieldArb: fc.Arbitrary<PocField> = fieldTypeArb.chain((type) => {
+const pocFieldArb: fc.Arbitrary<PocField> = fc.tuple(fieldTypeArb, fc.uuid()).chain(([type, id]) => {
   if (type === 'select') {
     return fc
       .record({
@@ -135,7 +135,7 @@ const pocFieldArb: fc.Arbitrary<PocField> = fieldTypeArb.chain((type) => {
         ),
       })
       .map((f) => {
-        const result: PocField = { type: f.type, label: f.label };
+        const result: PocField = { id, type: f.type, label: f.label };
         if (f.required !== undefined) result.required = f.required;
         if (f.options !== undefined) result.options = f.options;
         return result;
@@ -149,7 +149,7 @@ const pocFieldArb: fc.Arbitrary<PocField> = fieldTypeArb.chain((type) => {
       required: fc.option(fc.boolean(), { nil: undefined }),
     })
     .map((f) => {
-      const result: PocField = { type: f.type, label: f.label };
+      const result: PocField = { id, type: f.type, label: f.label };
       if (f.required !== undefined) result.required = f.required;
       return result;
     });
