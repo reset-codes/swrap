@@ -114,6 +114,13 @@ jobs:
             echo "  Previous: ${PREV_SHA:0:7}"
             echo "  Target:   $SHORT_SHA"
 
+            # ── Fix file ownership before pull ───────────────────────────────
+            # Docker build stages can leave host-mounted files owned by root.
+            # Restore deploy user ownership before git reset to prevent
+            # "unable to unlink old file: Permission denied" errors.
+            docker run --rm -v "$DEPLOY_DIR:/workspace" alpine \
+              chown -R 1000:1000 /workspace 2>/dev/null || true
+
             # ── Pull latest code ─────────────────────────────────────────────
             echo ""
             echo "▶ Pulling latest code..."
