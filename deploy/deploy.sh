@@ -136,10 +136,8 @@ echo "  Deploying: $CURRENT_SHA (was: ${PREV_SHA:0:7})"
 # ─── Build and deploy ────────────────────────────────────────────────────────
 echo ""
 echo "▶ Building and deploying containers..."
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" \
-    build --build-arg COMMIT_SHA="$(git rev-parse HEAD)"
-docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" \
-    up -d --remove-orphans
+COMMIT_SHA="$(git rev-parse HEAD)" docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" \
+    up -d --build --remove-orphans
 
 # ─── Run migrations ─────────────────────────────────────────────────────────
 echo ""

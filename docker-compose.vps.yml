@@ -65,6 +65,10 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
+      args:
+        # Baked into the image at build time so /health can report the running commit.
+        # Set via: COMMIT_SHA=$(git rev-parse HEAD) docker compose ... up -d --build
+        COMMIT_SHA: ${COMMIT_SHA:-unknown}
     restart: unless-stopped
     networks:
       - swrap_internal

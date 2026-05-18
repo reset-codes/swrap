@@ -110,10 +110,8 @@ jobs:
             # ── Build and deploy (zero-downtime via Docker Compose) ──────────
             echo ""
             echo "▶ Building and deploying containers..."
-            docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" \
-              build --build-arg COMMIT_SHA="$COMMIT_SHA"
-            docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" \
-              up -d --remove-orphans
+            COMMIT_SHA="$COMMIT_SHA" docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" \
+              up -d --build --remove-orphans
 
             # ── Run database migrations ──────────────────────────────────────
             echo ""
