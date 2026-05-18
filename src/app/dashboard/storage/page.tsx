@@ -65,12 +65,24 @@ export default async function StoragePage() {
 
   const adminId = session.user.id;
 
-  const [balance, lowBalance, transactions, perFormUsage] = await Promise.all([
-    getBalance(adminId),
-    isLowBalance(adminId),
-    getTransactionHistory(adminId, 50),
-    getPerFormUsage(adminId),
-  ]);
+  // Wrap all DB calls — if DB is unavailable, show empty state rather than crashing
+  let balance = 100;
+  let lowBalance = false;
+  let transactions: Awaited<ReturnType<typeof getTransactionHistory>> = [];
+  let perFormUsage: Awaited<ReturnType<typeof getPerFormUsage>> = [];
+  let dbError = false;
+
+  try {
+    [balance, lowBalance, transactions, perFormUsage] = await Promise.all([
+      getBalance(adminId),
+      isLowBalance(adminId),
+      getTransactionHistory(adminId, 50),
+      getPerFormUsage(adminId),
+    ]);
+  } catch (err) {
+    console.error('[StoragePage] DB fetch error:', err instanceof Error ? err.message : err);
+    dbError = true;
+  }
 
   const threshold = getLowCreditThreshold();
 
@@ -79,6 +91,26 @@ export default async function StoragePage() {
       <DashboardHeader title="Storage" />
 
       <div className="flex-1 overflow-auto p-6 space-y-6">
+
+        {/* DB unavailable banner */}
+        {dbError && (
+          <div
+            role="alert"
+            className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+          >
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" aria-hidden="true" />
+            <p>
+              Could not load storage data. The database may be temporarily unavailable.
+              {' '}
+              <a
+                href="/dashboard/storage"
+                className="underline hover:no-underline font-medium"
+              >
+                Retry
+              </a>
+            </p>
+          </div>
+        )}
 
         {/* ── Balance Card ─────────────────────────────────────────────────── */}
         <section

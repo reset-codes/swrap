@@ -15,12 +15,14 @@ import {
   getFormWithSchema,
   ServiceError,
   updateForm,
+  updateFormDraft,
 } from '@/services/FormService'
 import {
   FieldConfigSchema,
   FormModeSchema,
   EncryptionModeSchema,
 } from '@/lib/forms/schemas'
+import type { FieldConfig } from '@/types/form'
 
 // ─── Zod Schemas ──────────────────────────────────────────────────────────────
 
@@ -30,6 +32,19 @@ const UpdateFormBodySchema = z.object({
   mode: FormModeSchema.optional(),
   encryptionMode: EncryptionModeSchema.optional(),
   fields: z.array(FieldConfigSchema).optional(),
+  /** When true: DB-only update, no Walrus write. Used by canvas builder. */
+  isDraft: z.boolean().optional(),
+})
+
+// For draft updates from the canvas builder, fields may have unknown types
+// and don't need strict FieldConfigSchema validation
+const UpdateDraftBodySchema = z.object({
+  title: z.string().optional(),
+  description: z.string().optional(),
+  mode: FormModeSchema.optional(),
+  encryptionMode: EncryptionModeSchema.optional(),
+  fields: z.array(z.record(z.unknown())).optional(),
+  isDraft: z.literal(true),
 })
 
 // ─── Route params type ────────────────────────────────────────────────────────
@@ -65,7 +80,6 @@ export async function GET(_request: Request, { params }: RouteContext) {
     )
   }
 }
-
 // ─── PUT /api/forms/[formId] ──────────────────────────────────────────────────
 
 export async function PUT(request: Request, { params }: RouteContext) {
@@ -87,6 +101,34 @@ export async function PUT(request: Request, { params }: RouteContext) {
       apiError('VALIDATION_ERROR', 'Request body must be valid JSON.'),
       { status: 400 },
     )
+  }
+
+  const rawBody = body as Record<string, unknown>
+  const isDraftUpdate = rawBody['isDraft'] === true
+
+  if (isDraftUpdate) {
+    // Draft update: loose schema, fields can be any shape
+    const parsed = UpdateDraftBodySchema.safeParse(body)
+    if (!parsed.success) {
+      const message = parsed.error.errors.map((e) => `${e.path.join('.')}: ${e.message}`).join('; ')
+      return NextResponse.json(apiError('VALIDATION_ERROR', message), { status: 400 })
+    }
+    try {
+      const form = await updateFormDraft(formId, session.user.id, {
+        title: parsed.data.title,
+        description: parsed.data.description,
+        mode: parsed.data.mode,
+        encryptionMode: parsed.data.encryptionMode,
+        fields: parsed.data.fields as FieldConfig[] | undefined,
+      })
+      return NextResponse.json(apiSuccess(form))
+    } catch (err) {
+      if (err instanceof ServiceError) {
+        return NextResponse.json(apiError(err.code, err.message), { status: err.statusCode })
+      }
+      console.error(`[PUT /api/forms/${formId}] Draft update error:`, err instanceof Error ? err.message : err)
+      return NextResponse.json(apiError('INTERNAL_ERROR', 'An unexpected error occurred.'), { status: 500 })
+    }
   }
 
   const parsed = UpdateFormBodySchema.safeParse(body)

@@ -31,9 +31,9 @@ const nextConfig: NextConfig = {
 
   // Experimental features for Next.js 15
   experimental: {
-    // Enable typed routes for better type safety
-    typedRoutes: false,
+    // typedRoutes moved to top-level in Next.js 15
   },
+  typedRoutes: false,
 };
 
 export default nextConfig;

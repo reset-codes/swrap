@@ -10,6 +10,7 @@
 
 import { create } from 'zustand';
 import type { PocField } from '../components/form-builder/FieldCard';
+import { getDefaultField } from '../components/form-builder/fieldRegistry';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -22,7 +23,7 @@ export type FormTheme =
   | 'corporate'
   | 'dark';
 
-export type AutosaveStatus = 'idle' | 'saving' | 'saved';
+export type AutosaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 export type PublishStatus = 'idle' | 'publishing' | 'published' | 'error';
 
@@ -54,6 +55,8 @@ export interface FormBuilderState {
   // --- Editor UI state (not snapshotted) ---
   selectedFieldId: string | null;
   autosaveStatus: AutosaveStatus;
+  /** Draft form ID from the database — set after first save. */
+  draftFormId: string | null;
   publishStatus: PublishStatus;
   publishError: string | null;
 
@@ -80,6 +83,9 @@ export interface FormBuilderState {
   setAutosaveStatus(status: AutosaveStatus): void;
   setPublishStatus(status: PublishStatus, error?: string): void;
 
+  // --- Draft form ID (set after first save to DB) ---
+  setDraftFormId(id: string | null): void;
+
   // --- Undo / Redo ---
   undo(): void;
   redo(): void;
@@ -101,6 +107,7 @@ const INITIAL_STATE: Pick<
   | 'bannerUrl'
   | 'selectedFieldId'
   | 'autosaveStatus'
+  | 'draftFormId'
   | 'publishStatus'
   | 'publishError'
   | 'undoStack'
@@ -112,6 +119,7 @@ const INITIAL_STATE: Pick<
   bannerUrl: null,
   selectedFieldId: null,
   autosaveStatus: 'idle',
+  draftFormId: null,
   publishStatus: 'idle',
   publishError: null,
   undoStack: [],
@@ -171,11 +179,7 @@ export const useFormBuilderStore = create<FormBuilderState>()(
       const state = get();
       const undoRedo = pushUndo(state);
 
-      const newField: PocField = {
-        id: crypto.randomUUID(),
-        type,
-        label: '',
-      };
+      const newField: PocField = getDefaultField(type);
 
       const fields = [...state.fields];
       if (atIndex !== undefined && atIndex >= 0 && atIndex <= fields.length) {
@@ -283,6 +287,10 @@ export const useFormBuilderStore = create<FormBuilderState>()(
         publishStatus: status,
         publishError: error ?? null,
       });
+    },
+
+    setDraftFormId(id: string | null) {
+      set({ draftFormId: id });
     },
 
     // -----------------------------------------------------------------------

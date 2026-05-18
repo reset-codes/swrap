@@ -29,6 +29,26 @@
       "destination": "/api/poc/:path*"
     },
     {
+      "source": "/api/forms/:path*",
+      "destination": "/api/forms/:path*"
+    },
+    {
+      "source": "/api/submissions/:path*",
+      "destination": "/api/submissions/:path*"
+    },
+    {
+      "source": "/api/credits/:path*",
+      "destination": "/api/credits/:path*"
+    },
+    {
+      "source": "/api/upload/:path*",
+      "destination": "/api/upload/:path*"
+    },
+    {
+      "source": "/api/import/:path*",
+      "destination": "/api/import/:path*"
+    },
+    {
       "source": "/api/:path*",
       "destination": "https://api.swrap.tech/api/:path*"
     }

@@ -118,7 +118,7 @@ export function FormCard({ form, currentUserId }: FormCardProps) {
         {/* Actions */}
         <td className="px-4 py-3">
           <div className="flex items-center gap-1">
-            {/* Edit */}
+            {/* Edit — canvas builder for drafts, settings page for published */}
             <Button
               variant="ghost"
               size="icon"
@@ -127,7 +127,7 @@ export function FormCard({ form, currentUserId }: FormCardProps) {
               aria-label={`Edit form "${form.title}"`}
               title="Edit form"
             >
-              <Link href={`/dashboard/forms/${form.id}`}>
+              <Link href={form.isPublished ? `/dashboard/forms/${form.id}` : `/dashboard/forms/new?draft=${form.id}`}>
                 <Pencil className="h-4 w-4" aria-hidden="true" />
               </Link>
             </Button>

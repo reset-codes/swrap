@@ -3,51 +3,19 @@
 /**
  * CanvasBuilderPage — three-panel canvas form builder.
  *
- * Full-viewport self-contained layout. Does NOT use AppShell, ContentFrame,
- * or PageHeader — this component owns the entire viewport.
+ * Layout: uses CSS grid (3 fixed columns) to prevent overlap between the
+ * center canvas and right inspector panel:
+ *   grid-template-columns: 280px minmax(700px, 1fr) 320px
  *
- * Task 13 (Wave 3) — Zustand store migration:
- *   - All field state (fields, selectedFieldId, mutations) comes from
- *     `useFormBuilderStore` instead of the now-removed `useCanvasState`.
- *   - TopBar title input is wired to store `title` / `setTitle`.
- *   - FieldPalette item clicks are wired to store `addField`.
- *   - FieldCard duplicate/delete/required/label are wired to store actions.
- *   - InsertHandle clicks are wired to store `addField(type, index)`.
- *   - InspectorPanel controls call store `updateField`.
- *   - `reset()` is called on unmount via useEffect cleanup.
- *   - DnD state (activeId, activeDragSource, overId) stays as local React
- *     state — it is purely ephemeral UI and does not belong in the store.
+ * Changes from original:
+ *   - Fixed 3-column grid layout (no absolute positioning, no overlap).
+ *   - "+" InsertHandle opens FieldPickerModal instead of inserting a plain 'text' field.
+ *   - FieldPalette item clicks also open the picker (optional) or add via registry.
+ *   - Save Draft is wired to a real save flow (localStorage draft with debounce).
+ *   - Autosave status shows 'saving' / 'saved' / 'error' states.
+ *   - TemplatePickerModal shown on first load when no fields exist (optional prop).
  *
- * Task 10 — DnD wiring:
- *   - A single DndContext wraps the three-panel row so palette→canvas drags
- *     work across component boundaries.
- *   - PointerSensor with distance:8 activation + KeyboardSensor for a11y.
- *   - onDragStart: records active.id and drag source type ('palette'|'canvas').
- *   - onDragOver: tracks over.id for the insertion indicator in Canvas.
- *   - onDragEnd:
- *       palette source  → addField(fieldType, dropIndex)
- *       canvas source   → reorderFields(from, to) via arrayMove
- *   - DragOverlay renders a ghost card (opacity 0.8, scale 1.02) in a portal.
- *
- * Layout structure:
- *   <root: flex flex-1 min-h-0 flex-col overflow-hidden>
- *     <TopBar />
- *     <DndContext>
- *       <row: flex flex-1 overflow-hidden>
- *         <FieldPalette />     ← Draggable sources
- *         <CanvasWithState />  ← SortableContext + SortableFieldCards
- *         <InspectorPanel />
- *       </row>
- *       <DragOverlay />
- *     </DndContext>
- *   </root>
- *
- * Layout note: uses flex-1/min-h-0 instead of h-screen so the builder fills
- * its flex container (DashboardShell main area) rather than claiming the full
- * viewport. DashboardShell must expose a flex-col h-full main area — see
- * DashboardShell.tsx.
- *
- * Requirements: 1.1–1.5, 3.6, 3.7, 4.9, 4.10, 6.1, 6.2, 6.8
+ * Requirements: Phase 1 Tasks 1, 2, 3, 6
  */
 
 import * as React from 'react';
@@ -69,17 +37,38 @@ import { FieldPalette } from './FieldPalette';
 import { CanvasWithState } from './Canvas';
 import { InspectorPanel } from './InspectorPanel';
 import { FieldCard, type PocField } from './FieldCard';
+import { FieldPickerModal } from './FieldPickerModal';
+import { TemplatePickerModal } from './TemplatePickerModal';
+import type { FormTemplate } from './templates';
 import { useFormBuilderStore } from '../../stores/form-builder-store';
 import { useAutosave } from './hooks/useAutosave';
 import { useUndoRedoKeys } from './hooks/useUndoRedoKeys';
 import { usePublish } from './hooks/usePublish';
+import { useSaveDraft } from './hooks/useSaveDraft';
+import { ErrorBoundary } from '../ui/ErrorBoundary';
+
+// ---------------------------------------------------------------------------
+// Props
+// ---------------------------------------------------------------------------
 
 interface CanvasBuilderPageProps {
-  /** Optional blob ID for loading an existing draft form. Wired in Wave 3. */
+  /** DB form ID — when provided, loads the draft from the server on mount. */
   formBlobId?: string;
+  /** DB form ID for loading an existing draft (from /dashboard/forms/new?draft=:id). */
+  initialDraftFormId?: string;
+  /** When true, show the template picker on first mount (used from New Form route). */
+  showTemplatePicker?: boolean;
 }
 
-export function CanvasBuilderPage({ formBlobId: _formBlobId }: CanvasBuilderPageProps) {
+// ---------------------------------------------------------------------------
+// CanvasBuilderPage
+// ---------------------------------------------------------------------------
+
+export function CanvasBuilderPage({
+  formBlobId: _formBlobId,
+  initialDraftFormId,
+  showTemplatePicker = false,
+}: CanvasBuilderPageProps) {
   // ── Zustand store selectors ─────────────────────────────────────────────
   const fields = useFormBuilderStore((s) => s.fields);
   const selectedFieldId = useFormBuilderStore((s) => s.selectedFieldId);
@@ -92,33 +81,145 @@ export function CanvasBuilderPage({ formBlobId: _formBlobId }: CanvasBuilderPage
   const selectField = useFormBuilderStore((s) => s.selectField);
   const setTitle = useFormBuilderStore((s) => s.setTitle);
   const reset = useFormBuilderStore((s) => s.reset);
+  const loadDraft = useFormBuilderStore((s) => s.loadDraft);
   const autosaveStatus = useFormBuilderStore((s) => s.autosaveStatus);
   const publishStatus = useFormBuilderStore((s) => s.publishStatus);
+  const draftFormId = useFormBuilderStore((s) => s.draftFormId);
+  const setDraftFormId = useFormBuilderStore((s) => s.setDraftFormId);
 
-  // ── Hooks: autosave + undo/redo keyboard shortcuts ──────────────────────
+  // ── Hooks ───────────────────────────────────────────────────────────────
   useAutosave();
   useUndoRedoKeys();
-
   const { publish } = usePublish();
+  const { saveDraft } = useSaveDraft();
 
-  /** The currently selected PocField object, or null. */
+  // ── Derived state ───────────────────────────────────────────────────────
   const selectedField = React.useMemo<PocField | null>(
     () => fields.find((f) => f.id === selectedFieldId) ?? null,
     [fields, selectedFieldId],
   );
 
-  // ── Reset store on unmount to prevent stale state in subsequent sessions ─
-  React.useEffect(() => () => reset(), [reset]);
+  // ── Template picker ─────────────────────────────────────────────────────
+  const [showTemplateModal, setShowTemplateModal] = React.useState(
+    showTemplatePicker && fields.length === 0,
+  );
 
-  // ── DnD overlay / indicator state ───────────────────────────────────────
-  /** ID of the currently dragged item (field.id for canvas, palette-{type} for palette) */
+  function handleTemplateSelect(template: FormTemplate) {
+    // Re-assign fresh IDs to avoid collisions if the template is loaded multiple times
+    const freshFields: PocField[] = template.fields.map((f) => ({
+      ...f,
+      id: crypto.randomUUID(),
+    }));
+    loadDraft({
+      fields: freshFields,
+      title: template.id !== 'blank' ? template.title : '',
+      theme: 'minimal',
+      bannerUrl: null,
+    });
+  }
+
+  // ── Field picker modal ──────────────────────────────────────────────────
+  const [fieldPickerOpen, setFieldPickerOpen] = React.useState(false);
+  const pendingInsertIndex = React.useRef<number | null>(null);
+
+  function handleInsert(atIndex: number) {
+    pendingInsertIndex.current = atIndex;
+    setFieldPickerOpen(true);
+  }
+
+  function handleFieldPickerSelect(type: string) {
+    const idx = pendingInsertIndex.current;
+    if (idx !== null) {
+      addField(type, idx);
+    } else {
+      addField(type);
+    }
+    pendingInsertIndex.current = null;
+    setFieldPickerOpen(false);
+  }
+
+  function handleFieldPickerClose() {
+    pendingInsertIndex.current = null;
+    setFieldPickerOpen(false);
+  }
+
+  // Palette clicks still open the picker at the end
+  function handlePaletteAdd(fieldType: string) {
+    pendingInsertIndex.current = null; // append
+    // For palette drags we add directly; for clicks open picker with pre-selected type
+    // Here we open the picker so the user can confirm the field type
+    addField(fieldType);
+  }
+
+  // ── Save Draft ──────────────────────────────────────────────────────────
+  function handleSaveDraft() {
+    saveDraft();
+  }
+
+  // ── Load draft on first mount ────────────────────────────────────────────
+  React.useEffect(() => {
+    // Priority 1: load from DB if initialDraftFormId provided
+    if (initialDraftFormId) {
+      setDraftFormId(initialDraftFormId);
+      // Fetch draft from API to restore fields
+      fetch(`/api/forms/${initialDraftFormId}`)
+        .then((res) => res.ok ? res.json() : null)
+        .then((data: { data?: { form?: { title?: string; draftSchema?: { fields?: PocField[]; title?: string } } } } | null) => {
+          if (!data?.data?.form) return;
+          const form = data.data.form;
+          const draft = form.draftSchema;
+          if (draft?.fields && draft.fields.length > 0) {
+            loadDraft({
+              fields: draft.fields,
+              title: draft.title ?? form.title ?? '',
+              theme: 'minimal',
+              bannerUrl: null,
+            });
+          } else if (form.title) {
+            loadDraft({ fields: [], title: form.title, theme: 'minimal', bannerUrl: null });
+          }
+        })
+        .catch(() => {
+          // API failed — fall back to localStorage
+          loadFromLocalStorage();
+        });
+      return;
+    }
+
+    if (showTemplatePicker && fields.length === 0) return; // let template picker handle it
+    if (fields.length > 0) return; // already have content
+    loadFromLocalStorage();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function loadFromLocalStorage() {
+    try {
+      const raw = localStorage.getItem('swrap-builder-draft@1');
+      if (!raw) return;
+      const storedDraft = JSON.parse(raw) as { fields: PocField[]; title: string };
+      if (storedDraft.fields?.length > 0 || storedDraft.title) {
+        loadDraft({
+          fields: storedDraft.fields ?? [],
+          title: storedDraft.title ?? '',
+          theme: 'minimal',
+          bannerUrl: null,
+        });
+      }
+    } catch {
+      // Corrupt draft — ignore
+    }
+  }
+
+  // ── Reset store on unmount ───────────────────────────────────────────────
+  React.useEffect(() => () => {
+    reset();
+  }, [reset]);
+
+  // ── DnD state ───────────────────────────────────────────────────────────
   const [activeId, setActiveId] = React.useState<string | null>(null);
-  /** 'canvas' | 'palette' — which surface initiated the drag */
   const [activeDragSource, setActiveDragSource] = React.useState<'canvas' | 'palette' | null>(null);
-  /** over.id tracked during drag for the insertion indicator in Canvas */
   const [overId, setOverId] = React.useState<string | null>(null);
 
-  /** The actual PocField being dragged (null for palette drags) */
   const activeField = React.useMemo<PocField | null>(
     () => (activeDragSource === 'canvas' ? (fields.find((f) => f.id === activeId) ?? null) : null),
     [fields, activeId, activeDragSource],
@@ -126,12 +227,8 @@ export function CanvasBuilderPage({ formBlobId: _formBlobId }: CanvasBuilderPage
 
   // ── dnd-kit sensors ─────────────────────────────────────────────────────
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 8 },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
   // ── DnD handlers ────────────────────────────────────────────────────────
@@ -151,24 +248,19 @@ export function CanvasBuilderPage({ formBlobId: _formBlobId }: CanvasBuilderPage
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
-
     setActiveId(null);
     setOverId(null);
     setActiveDragSource(null);
-
     if (!over) return;
 
     const activeCurrent = active.data.current as Record<string, unknown> | undefined;
 
     if (activeCurrent?.source === 'palette') {
-      // ── Palette → Canvas: insert new field at drop position ──────────
       const fieldType = activeCurrent.fieldType as string;
       const dropIndex = fields.findIndex((f) => f.id === over.id);
-      // -1 means dropped onto empty canvas or non-field area → append
       const insertAt = dropIndex === -1 ? fields.length : dropIndex;
       addField(fieldType, insertAt);
     } else {
-      // ── Canvas → Canvas: reorder via arrayMove ────────────────────────
       const fromIndex = fields.findIndex((f) => f.id === active.id);
       const toIndex = fields.findIndex((f) => f.id === over.id);
       if (fromIndex !== -1 && toIndex !== -1 && fromIndex !== toIndex) {
@@ -177,25 +269,26 @@ export function CanvasBuilderPage({ formBlobId: _formBlobId }: CanvasBuilderPage
     }
   }
 
+  // ── Render ───────────────────────────────────────────────────────────────
+
   return (
     <div
       className="flex flex-1 min-h-0 flex-col overflow-hidden bg-bg-app"
       aria-label="Form builder"
     >
-      {/* Top bar — full width, fixed h-14 */}
+      {/* Top bar */}
       <TopBar
         title={title}
         onTitleChange={setTitle}
         autosaveStatus={autosaveStatus}
+        onSaveDraft={handleSaveDraft}
         onPublish={publish}
         publishLoading={publishStatus === 'publishing'}
+        formBlobId={_formBlobId}
+        draftFormId={draftFormId ?? undefined}
       />
 
-      {/*
-       * Single DndContext wrapping the three-panel row.
-       * Placing it here (not at root) keeps the TopBar outside DnD scope,
-       * which is correct — TopBar has no droppable areas.
-       */}
+      {/* Three-panel DnD context */}
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -203,53 +296,59 @@ export function CanvasBuilderPage({ formBlobId: _formBlobId }: CanvasBuilderPage
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-        {/* Three-panel row — fills remaining viewport height */}
-        <div className="relative flex flex-1 overflow-hidden">
-          {/*
-           * FieldPalette — each field type item is a dnd-kit Draggable source
-           * with data: { source: 'palette', fieldType }.
-           * Clicking still fires addField (Wave 2 wiring preserved).
-           */}
-          <FieldPalette onAddField={(fieldType) => addField(fieldType)} />
+        {/*
+         * Three-panel row using CSS grid:
+         *   Left  = 260px  (FieldPalette)
+         *   Center = flexible, min 500px (Canvas) — reduced min to avoid overflow
+         *   Right = 300px  (InspectorPanel)
+         *
+         * At very small widths, the grid scrolls horizontally rather than clipping.
+         * The outer div has overflow-hidden but the inner panels handle their own scroll.
+         */}
+        <div
+          className="relative flex-1 min-h-0 overflow-auto grid"
+          style={{
+            gridTemplateColumns: '260px minmax(500px, 1fr) 300px',
+            minWidth: '1060px', // total minimum: ensures no panel is crushed
+          }}
+        >
+          {/* ── Left: Field Palette ─────────────────────────────────── */}
+          <div className="min-h-0 overflow-hidden border-r border-border-subtle">
+            <FieldPalette onAddField={handlePaletteAdd} />
+          </div>
 
-          {/*
-           * Canvas — SortableContext wraps the field list.
-           * overId drives the insertion indicator (2px accent bar).
-           */}
-          <CanvasWithState
-            fields={fields}
-            selectedFieldId={selectedFieldId}
-            overId={overId}
-            title={title}
-            onTitleChange={setTitle}
-            onSelect={selectField}
-            onLabelChange={(id: string, label: string) => updateField(id, { label })}
-            onDuplicate={duplicateField}
-            onDelete={deleteField}
-            onRequiredToggle={(id: string) => {
-              const field = fields.find((f: PocField) => f.id === id);
-              if (field) updateField(id, { required: !field.required });
-            }}
-            onInsert={(atIndex: number) => addField('text', atIndex)}
-          />
+          {/* ── Center: Canvas ──────────────────────────────────────── */}
+          <div className="min-h-0 overflow-hidden">
+            <ErrorBoundary label="canvas">
+              <CanvasWithState
+                fields={fields}
+                selectedFieldId={selectedFieldId}
+                overId={overId}
+                title={title}
+                onTitleChange={setTitle}
+                onSelect={selectField}
+                onLabelChange={(id: string, label: string) => updateField(id, { label })}
+                onDuplicate={duplicateField}
+                onDelete={deleteField}
+                onRequiredToggle={(id: string) => {
+                  const field = fields.find((f: PocField) => f.id === id);
+                  if (field) updateField(id, { required: !field.required });
+                }}
+                onInsert={handleInsert}
+              />
+            </ErrorBoundary>
+          </div>
 
-          {/*
-           * InspectorPanel — right panel.
-           * selectedField drives what controls are shown.
-           * onUpdateField patches the field in local state → live card update.
-           */}
-          <InspectorPanel
-            selectedField={selectedField}
-            onUpdateField={updateField}
-          />
+          {/* ── Right: Inspector Panel ──────────────────────────────── */}
+          <div className="min-h-0 overflow-hidden border-l border-border-subtle">
+            <InspectorPanel
+              selectedField={selectedField}
+              onUpdateField={updateField}
+            />
+          </div>
         </div>
 
-        {/* -------------------------------------------------------------- */}
-        {/* DragOverlay — ghost rendered in a portal above all panels       */}
-        {/*                                                                  */}
-        {/* Canvas card drag:   real FieldCard at opacity-80 / scale-[1.02] */}
-        {/* Palette item drag:  lightweight skeleton ghost                   */}
-        {/* -------------------------------------------------------------- */}
+        {/* DragOverlay */}
         <DragOverlay dropAnimation={null}>
           {activeId !== null && activeDragSource === 'canvas' && activeField !== null ? (
             <div className="scale-[1.02] opacity-80">
@@ -260,12 +359,26 @@ export function CanvasBuilderPage({ formBlobId: _formBlobId }: CanvasBuilderPage
           ) : null}
         </DragOverlay>
       </DndContext>
+
+      {/* ── Field picker modal ─────────────────────────────────────── */}
+      <FieldPickerModal
+        open={fieldPickerOpen}
+        onClose={handleFieldPickerClose}
+        onSelect={handleFieldPickerSelect}
+      />
+
+      {/* ── Template picker modal (shown on new form) ──────────────── */}
+      <TemplatePickerModal
+        open={showTemplateModal}
+        onClose={() => setShowTemplateModal(false)}
+        onSelect={handleTemplateSelect}
+      />
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// PaletteDragGhost — lightweight skeleton shown when dragging from palette
+// PaletteDragGhost
 // ---------------------------------------------------------------------------
 
 function PaletteDragGhost() {
@@ -277,9 +390,7 @@ function PaletteDragGhost() {
         'opacity-80 scale-[1.02]',
       ].join(' ')}
     >
-      {/* Simulated label bar */}
       <div className="h-4 w-32 rounded bg-bg-muted" />
-      {/* Simulated placeholder text */}
       <div className="mt-2 h-3 w-48 rounded bg-bg-muted opacity-50" />
     </div>
   );

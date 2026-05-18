@@ -233,6 +233,83 @@ function ReadOnlyField({ field, index }: ReadOnlyFieldProps) {
             aria-label={field.label}
           />
         );
+      case 'phone':
+        return (
+          <Input
+            id={fieldId}
+            type="tel"
+            disabled
+            readOnly
+            placeholder={`${field.label} (read-only)`}
+            aria-label={field.label}
+          />
+        );
+      case 'url':
+        return (
+          <Input
+            id={fieldId}
+            type="url"
+            disabled
+            readOnly
+            placeholder={`${field.label} (read-only)`}
+            aria-label={field.label}
+          />
+        );
+      case 'wallet_address':
+        return (
+          <Input
+            id={fieldId}
+            type="text"
+            disabled
+            readOnly
+            placeholder="0x…"
+            aria-label={field.label}
+          />
+        );
+      case 'star_rating': {
+        const maxStars = (field as { maxStars?: number }).maxStars ?? 5;
+        return (
+          <div
+            className="flex items-center gap-1"
+            role="group"
+            aria-label={`${field.label} — star rating`}
+          >
+            {Array.from({ length: maxStars }).map((_, i) => (
+              <span
+                key={i}
+                className="text-xl text-amber-400"
+                aria-hidden="true"
+              >
+                ☆
+              </span>
+            ))}
+            <span className="sr-only">Rate from 1 to {maxStars} stars</span>
+          </div>
+        );
+      }
+      case 'file_upload':
+      case 'image_upload':
+        return (
+          <div
+            className={[
+              'flex flex-col items-center justify-center gap-2',
+              'rounded-lg border-2 border-dashed border-border-subtle',
+              'bg-bg-app px-6 py-8 text-center opacity-60',
+            ].join(' ')}
+            aria-label={`${field.label} — upload area (read-only)`}
+            role="img"
+          >
+            <span className="text-2xl">
+              {field.type === 'image_upload' ? '🖼️' : '📁'}
+            </span>
+            <p className="text-sm font-medium text-text-secondary">
+              {field.type === 'image_upload' ? 'Upload Image' : 'Upload File'}
+            </p>
+            <p className="text-xs text-text-tertiary">
+              Drag & drop or click to upload
+            </p>
+          </div>
+        );
       case 'text':
       default:
         return (

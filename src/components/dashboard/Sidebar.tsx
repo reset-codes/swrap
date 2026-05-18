@@ -1,6 +1,6 @@
 'use client';
 
-import { LogOut, Database, ChevronLeft, ChevronRight } from 'lucide-react';
+import { LogOut, Database, ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SidebarNav } from './SidebarNav';
 import { useSidebar } from './SidebarContext';
@@ -68,7 +68,12 @@ export function Sidebar({ user }: SidebarProps) {
           "flex h-14 items-center border-b border-border transition-all duration-300",
           isOpen ? "justify-between px-4" : "justify-center px-0"
         )}>
-          {isOpen && <span className="text-h3 font-semibold tracking-tight text-text-primary whitespace-nowrap">Swrap</span>}
+          {isOpen && (
+            <div className="flex items-center gap-2.5">
+              <img src="/icon.svg" alt="Swrap" className="h-6 w-6" />
+              <span className="text-h3 font-semibold tracking-tight text-text-primary whitespace-nowrap">Swrap</span>
+            </div>
+          )}
           <Button
             variant="ghost"
             size="icon"
@@ -76,7 +81,11 @@ export function Sidebar({ user }: SidebarProps) {
             onClick={toggle}
             aria-label={isOpen ? "Collapse sidebar" : "Expand sidebar"}
           >
-            {isOpen ? <ChevronLeft className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
+            {isOpen ? (
+              <ChevronLeft className="h-5 w-5" />
+            ) : (
+              <img src="/icon.svg" alt="Swrap" className="h-7 w-7" />
+            )}
           </Button>
         </div>
 
@@ -96,7 +105,9 @@ export function Sidebar({ user }: SidebarProps) {
                 <Database className="h-4 w-4 shrink-0 text-text-muted" aria-hidden="true" />
                 <div className="min-w-0">
                   <p className="text-small font-medium text-text-secondary whitespace-nowrap">Credits</p>
-                  <p className="text-small text-text-muted whitespace-nowrap">— remaining</p>
+                  <p className="text-small text-text-muted whitespace-nowrap">
+                    <a href="/dashboard/storage" className="hover:underline">View usage →</a>
+                  </p>
                 </div>
               </div>
             ) : (

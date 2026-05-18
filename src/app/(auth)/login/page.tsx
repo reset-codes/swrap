@@ -43,6 +43,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       <div className="rounded-lg border border-border bg-surface p-8 shadow-sm">
         {/* Wordmark */}
         <div className="mb-6 text-center">
+          <img src="/icon.svg" alt="Swrap" className="mx-auto mb-4 h-12 w-12" />
           <h1 className="text-h2 font-semibold tracking-tight text-text-primary">Swrap</h1>
           <p className="mt-1 text-small text-text-secondary">
             Structured communication for modern communities

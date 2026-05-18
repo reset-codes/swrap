@@ -28,6 +28,9 @@ const FIELD_TYPE_LABELS: Record<FieldType, string> = {
   url:            'URL',
   star_rating:    'Star rating',
   wallet_address: 'Wallet address',
+  phone:          'Phone',
+  file_upload:    'File upload',
+  image_upload:   'Image upload',
 };
 
 export interface FieldTypePickerProps {

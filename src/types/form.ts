@@ -89,6 +89,11 @@ export interface FormMetadata {
   description?: string;
   ownerId: string;
   schemaBlobId: string | null;
+  /**
+   * Full draft schema JSON (fields, title, version) — stored in PostgreSQL for persistence.
+   * Null until the first Save Draft. On publish, this is written to Walrus as `schemaBlobId`.
+   */
+  draftSchema?: Record<string, unknown> | null;
   mode: FormMode;
   encryptionMode: EncryptionMode;
   sealPolicyId: string | null;

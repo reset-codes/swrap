@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && node scripts/migrate-prod.js && next build",
     "start": "next start",
     "lint": "next lint",
     "db:lint": "bash db/lint/run-lint.sh",

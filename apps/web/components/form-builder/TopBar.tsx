@@ -24,7 +24,7 @@ import { ThemeSelector } from './ThemeSelector';
 // Types
 // ---------------------------------------------------------------------------
 
-export type AutosaveStatus = 'idle' | 'saving' | 'saved';
+export type AutosaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 export interface TopBarProps {
   /**
@@ -44,6 +44,8 @@ export interface TopBarProps {
   publishLoading?: boolean;
   /** The blob ID used to construct the preview URL (optional for new forms) */
   formBlobId?: string;
+  /** The database form ID used to construct the edit/preview URL */
+  draftFormId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -78,6 +80,23 @@ function AutosaveBadge({ status }: AutosaveBadgeProps) {
     );
   }
 
+  if (status === 'error') {
+    return (
+      <div
+        className="flex items-center gap-1.5 text-red-500"
+        aria-live="assertive"
+        aria-label="Save failed"
+        role="alert"
+      >
+        <span
+          className="inline-block h-1.5 w-1.5 rounded-full bg-red-500"
+          aria-hidden="true"
+        />
+        <span className="text-token-sm">Save failed</span>
+      </div>
+    );
+  }
+
   // status === 'saved'
   return (
     <div
@@ -91,7 +110,7 @@ function AutosaveBadge({ status }: AutosaveBadgeProps) {
         aria-hidden="true"
         strokeWidth={2.5}
       />
-      <span className="text-token-sm">All changes saved</span>
+      <span className="text-token-sm">Saved</span>
     </div>
   );
 }
@@ -108,6 +127,7 @@ export function TopBar({
   onPublish,
   publishLoading = false,
   formBlobId,
+  draftFormId,
 }: TopBarProps) {
   // autosaveStatus — prefer externally-controlled value (from store)
   const [localAutosaveStatus] = React.useState<AutosaveStatus>('idle');
@@ -118,10 +138,24 @@ export function TopBar({
   }
 
   function handlePreview() {
-    const url = formBlobId
-      ? `/poc/forms/${formBlobId}`
-      : '/poc/forms/new';
-    window.open(url, '_blank', 'noopener,noreferrer');
+    // For Walrus-published forms: open the POC preview
+    if (formBlobId) {
+      window.open(`/poc/forms/${formBlobId}`, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    // For DB-saved drafts: open the dashboard edit page (best available preview)
+    if (draftFormId) {
+      window.open(`/dashboard/forms/${draftFormId}`, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    // Neither saved yet — trigger save first, then user can retry
+    onSaveDraft?.();
+    // Use toast if available; fallback to console
+    if (typeof window !== 'undefined') {
+      // Temporary feedback until toast is available
+      const el = document.querySelector('[role="status"]');
+      if (!el) console.info('[TopBar] Save your draft first to enable preview.');
+    }
   }
 
   function handleSaveDraft() {

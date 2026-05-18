@@ -3,21 +3,19 @@
 /**
  * FieldPalette — categorised field list with search.
  *
- * Responsive:
- *   xl (≥1920px): 240px (w-60) full sidebar with labels + search
- *   md (≥1280px): 40px (w-10) icon-only rail with tooltips
- *   <1280px:     hidden
+ * Always shows full labels in the 280px grid column of the builder layout.
+ * Supports drag-to-canvas via dnd-kit Draggable sources.
  *
  * Requirements: 3.1, 3.2, 3.3, 3.4, 3.5
  */
 
 import * as React from 'react';
-import * as TooltipPrimitive from '@radix-ui/react-tooltip';
 import { useDraggable } from '@dnd-kit/core';
 import {
   Type,
   AlignLeft,
   Mail,
+  Phone,
   Link,
   ChevronDown,
   CheckSquare,
@@ -25,6 +23,9 @@ import {
   Wallet,
   Search,
   ChevronUp,
+  Hash,
+  Upload,
+  Image,
 } from 'lucide-react';
 
 // ---------------------------------------------------------------------------
@@ -48,19 +49,23 @@ interface FieldTypeMeta {
 const FIELD_TYPE_META: Record<string, FieldTypeMeta> = {
   text: { label: 'Short Text', icon: Type },
   textarea: { label: 'Long Text', icon: AlignLeft },
+  number: { label: 'Number', icon: Hash },
   email: { label: 'Email', icon: Mail },
+  phone: { label: 'Phone', icon: Phone },
   url: { label: 'URL', icon: Link },
   select: { label: 'Dropdown', icon: ChevronDown },
   checkbox: { label: 'Checkbox', icon: CheckSquare },
-  star_rating: { label: 'Star Rating', icon: Star },
+  star_rating: { label: 'Rating', icon: Star },
   wallet_address: { label: 'Wallet Address', icon: Wallet },
+  file_upload: { label: 'File Upload', icon: Upload },
+  image_upload: { label: 'Image Upload', icon: Image },
 };
 
 export const PALETTE_CATEGORIES: PaletteCategory[] = [
-  { name: 'Text', types: ['text', 'textarea', 'email', 'url'] },
-  { name: 'Choice', types: ['select', 'checkbox'] },
-  { name: 'Rating', types: ['star_rating'] },
-  { name: 'Crypto', types: ['wallet_address'] },
+  { name: 'Basic', types: ['text', 'textarea', 'number', 'select', 'checkbox'] },
+  { name: 'Contact', types: ['email', 'phone', 'url'] },
+  { name: 'Media', types: ['file_upload', 'image_upload'] },
+  { name: 'Advanced', types: ['star_rating', 'wallet_address'] },
 ];
 
 // ---------------------------------------------------------------------------
@@ -124,41 +129,11 @@ function DraggablePaletteItem({ fieldType, children }: DraggablePaletteItemProps
 }
 
 // ---------------------------------------------------------------------------
-// Tooltip wrapper (shown only in icon-rail mode)
-// ---------------------------------------------------------------------------
-
-function FieldTooltip({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <TooltipPrimitive.Provider delayDuration={300}>
-      <TooltipPrimitive.Root>
-        <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
-        <TooltipPrimitive.Portal>
-          <TooltipPrimitive.Content
-            side="right"
-            sideOffset={8}
-            className="z-50 rounded-md bg-bg-surface border border-border-subtle px-2.5 py-1.5 text-xs text-text-primary shadow-elevation-md"
-          >
-            {label}
-            <TooltipPrimitive.Arrow className="fill-bg-surface" />
-          </TooltipPrimitive.Content>
-        </TooltipPrimitive.Portal>
-      </TooltipPrimitive.Root>
-    </TooltipPrimitive.Provider>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
 
 export interface FieldPaletteProps {
-  /** Called when a field type is clicked. Defaults to no-op; wired to store in Wave 3. */
+  /** Called when a field type is clicked in the palette. */
   onAddField?: (fieldType: string) => void;
 }
 
@@ -188,13 +163,11 @@ export function FieldPalette({ onAddField }: FieldPaletteProps) {
 
   return (
     <aside
-      className="hidden shrink-0 border-r border-border-subtle bg-bg-surface md:flex md:w-10 md:flex-col xl:w-60"
+      className="flex h-full flex-col bg-bg-surface overflow-hidden"
       aria-label="Field palette"
     >
-      {/* ------------------------------------------------------------------ */}
-      {/* Full sidebar — shown only at xl (≥1920px)                          */}
-      {/* ------------------------------------------------------------------ */}
-      <div className="hidden xl:flex xl:flex-1 xl:flex-col xl:overflow-hidden">
+      {/* Full sidebar — always visible in the 280px grid column */}
+      <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
         <div className="flex flex-col gap-2 px-4 pb-2 pt-6">
           <p className="text-xs font-semibold uppercase tracking-wide text-text-secondary">
@@ -276,33 +249,6 @@ export function FieldPalette({ onAddField }: FieldPaletteProps) {
             </p>
           )}
         </div>
-      </div>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Icon-only rail — shown at md (1280–1919px), hidden at xl           */}
-      {/* ------------------------------------------------------------------ */}
-      <div className="flex flex-1 flex-col items-center gap-1 overflow-y-auto py-4 xl:hidden">
-        {PALETTE_CATEGORIES.flatMap((category) =>
-          category.types.map((fieldType) => {
-            const meta = FIELD_TYPE_META[fieldType];
-            if (!meta) return null;
-            const Icon = meta.icon;
-            return (
-              <DraggablePaletteItem key={fieldType} fieldType={fieldType}>
-                <FieldTooltip label={meta.label}>
-                  <button
-                    type="button"
-                    onClick={() => handleAddField(fieldType)}
-                    className="flex h-8 w-8 items-center justify-center rounded-md text-text-secondary hover:bg-bg-muted hover:text-text-primary transition-colors duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-1"
-                    aria-label={`Add ${meta.label} field`}
-                  >
-                    <Icon className="h-4 w-4" aria-hidden="true" />
-                  </button>
-                </FieldTooltip>
-              </DraggablePaletteItem>
-            );
-          }),
-        )}
       </div>
     </aside>
   );

@@ -102,12 +102,12 @@ export function Canvas({
   return (
     /*
      * Outer container:
-     *   - flex-1 fills the space between Palette and Inspector
+     *   - h-full fills the grid column
      *   - overflow-y-auto for scrolling long forms
      *   - theme canvas class applied from THEME_CONFIG (task 18)
      *   - `group` enables group-hover: utilities on child InsertHandles
      */
-    <div className={['group flex-1 overflow-y-auto', themeConfig.canvas].join(' ')}>
+    <div className={['group h-full overflow-y-auto', themeConfig.canvas].join(' ')}>
       {/* Centred content column */}
       <div className="mx-auto max-w-2xl px-4 py-6">
 

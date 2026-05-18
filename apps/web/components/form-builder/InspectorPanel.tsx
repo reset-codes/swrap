@@ -549,9 +549,9 @@ export function InspectorPanel({
 
   return (
     <>
-      {/* xl: fixed 320px sidebar */}
+      {/* Fixed sidebar — fills the grid column always visible */}
       <div
-        className="hidden xl:flex xl:w-80 xl:shrink-0 xl:flex-col xl:border-l xl:border-border-subtle xl:bg-bg-surface"
+        className="flex h-full flex-col bg-bg-surface"
         aria-label="Inspector panel"
         role="complementary"
       >
@@ -561,26 +561,6 @@ export function InspectorPanel({
           </AnimatePresence>
         </div>
       </div>
-
-      {/* md (768-1279px): slide-over drawer */}
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            key="inspector-drawer"
-            className="absolute inset-y-0 right-0 z-50 flex w-80 flex-col border-l border-border-subtle bg-bg-surface xl:hidden"
-            variants={variants}
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            aria-label="Inspector panel"
-            role="complementary"
-          >
-            <div className="flex-1 overflow-y-auto px-4 py-6">
-              <FieldControls field={selectedField} onUpdate={handleUpdate} />
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </>
   );
 }

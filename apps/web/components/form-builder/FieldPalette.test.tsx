@@ -34,20 +34,20 @@ describe('filterPaletteTypes', () => {
   it('filters by human-readable label (case-insensitive, partial match)', () => {
     const result = filterPaletteTypes(PALETTE_CATEGORIES, 'email');
     expect(result).toHaveLength(1);
-    expect(result[0].name).toBe('Text');
+    expect(result[0].name).toBe('Contact');
     expect(result[0].types).toContain('email');
     expect(result[0].types).not.toContain('text');
   });
 
   it('filters by category name (case-insensitive)', () => {
-    const crypto = filterPaletteTypes(PALETTE_CATEGORIES, 'CRYPTO');
-    expect(crypto).toHaveLength(1);
-    expect(crypto[0].name).toBe('Crypto');
+    const advanced = filterPaletteTypes(PALETTE_CATEGORIES, 'ADVANCED');
+    expect(advanced).toHaveLength(1);
+    expect(advanced[0].name).toBe('Advanced');
 
     // Category match returns all types in that category
-    const text = filterPaletteTypes(PALETTE_CATEGORIES, 'text');
-    const textCat = text.find((c) => c.name === 'Text');
-    expect(textCat?.types).toEqual(PALETTE_CATEGORIES.find((c) => c.name === 'Text')?.types);
+    const basic = filterPaletteTypes(PALETTE_CATEGORIES, 'basic');
+    const basicCat = basic.find((c) => c.name === 'Basic');
+    expect(basicCat?.types).toEqual(PALETTE_CATEGORIES.find((c) => c.name === 'Basic')?.types);
   });
 
   it('returns empty array when nothing matches', () => {
@@ -78,13 +78,12 @@ describe('filterPaletteTypes', () => {
 // ---------------------------------------------------------------------------
 
 describe('FieldPalette', () => {
-  it('renders with correct aria-label and all four category headings', () => {
+  it('renders with correct aria-label and category headings', () => {
     render(<FieldPalette />);
     expect(screen.getByRole('complementary').getAttribute('aria-label')).toBe('Field palette');
-    expect(screen.getByRole('button', { name: 'Text category' })).not.toBeNull();
-    expect(screen.getByRole('button', { name: 'Choice category' })).not.toBeNull();
-    expect(screen.getByRole('button', { name: 'Rating category' })).not.toBeNull();
-    expect(screen.getByRole('button', { name: 'Crypto category' })).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Basic category' })).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Contact category' })).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Advanced category' })).not.toBeNull();
   });
 
   it('field type buttons exist with correct aria-labels', () => {
@@ -98,7 +97,7 @@ describe('FieldPalette', () => {
     render(<FieldPalette onAddField={onAddField} />);
     fireEvent.click(screen.getAllByRole('button', { name: 'Add Short Text field' })[0]);
     expect(onAddField).toHaveBeenCalledWith('text');
-    fireEvent.click(screen.getAllByRole('button', { name: 'Add Star Rating field' })[0]);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add Rating field' })[0]);
     expect(onAddField).toHaveBeenCalledWith('star_rating');
   });
 
@@ -122,7 +121,7 @@ describe('FieldPalette', () => {
 
   it('categories collapse and re-expand on header click', () => {
     render(<FieldPalette />);
-    const btn = screen.getByRole('button', { name: 'Text category' });
+    const btn = screen.getByRole('button', { name: 'Basic category' });
     expect(btn.getAttribute('aria-expanded')).toBe('true');
     fireEvent.click(btn);
     expect(btn.getAttribute('aria-expanded')).toBe('false');

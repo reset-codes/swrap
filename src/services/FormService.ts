@@ -20,6 +20,7 @@ import type {
   UpdateFormInput,
 } from '@/types/form'
 import { checkSufficient, deduct } from './CreditService'
+import type { Prisma } from '@prisma/client'
 
 // ---------------------------------------------------------------------------
 // Local helper: read a Walrus blob and parse as JSON
@@ -96,6 +97,7 @@ function toFormMetadata(
     description: string | null
     ownerId: string
     schemaBlobId: string | null
+    draftSchema?: unknown
     mode: string
     encryptionMode: string
     sealPolicyId: string | null
@@ -113,6 +115,7 @@ function toFormMetadata(
     description: form.description ?? undefined,
     ownerId: form.ownerId,
     schemaBlobId: form.schemaBlobId,
+    draftSchema: (form.draftSchema as Record<string, unknown> | null) ?? null,
     mode: form.mode as FormMetadata['mode'],
     encryptionMode: form.encryptionMode as FormMetadata['encryptionMode'],
     sealPolicyId: form.sealPolicyId,
@@ -124,20 +127,146 @@ function toFormMetadata(
   }
 }
 
-// ─── Public API ───────────────────────────────────────────────────────────────
+/**
+ * Create a new form draft (DB-only, no Walrus write).
+ *
+ * Stores the complete form schema (including all field data) in the
+ * `draftSchema` JSON column so fields survive refresh, logout, and
+ * cross-device access.
+ *
+ * @param adminId  The authenticated admin's user ID.
+ * @param input    The form creation input — fields are stored in draftSchema.
+ * @returns        The created form's metadata (includes draftSchema).
+ */
+export async function createFormDraft(
+  adminId: string,
+  input: CreateFormInput,
+): Promise<FormMetadata> {
+  // ── Step 1: Resolve slug ──────────────────────────────────────────────────
+  let slug = input.slug ?? generateSlug(input.title || 'untitled-form')
+  if (input.slug) {
+    slug = input.slug
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+  }
+
+  // Ensure slug uniqueness — append random suffix on collision
+  const existing = await prisma.form.findUnique({ where: { slug } })
+  if (existing) {
+    slug = `${slug}-${Math.random().toString(36).slice(2, 6)}`
+  }
+
+  const formId = crypto.randomUUID()
+  const now = new Date().toISOString()
+
+  // Assign IDs and order to fields for the draft schema
+  const fields: FieldConfig[] = input.fields.map((f, index) => ({
+    ...f,
+    id: crypto.randomUUID(),
+    order: index,
+  }))
+
+  // Build a complete draft schema (matches FormSchema shape)
+  const draftSchema: FormSchema = {
+    id: formId,
+    title: input.title || 'Untitled Form',
+    description: input.description,
+    slug,
+    mode: input.mode,
+    encryptionMode: input.encryptionMode,
+    fields,
+    version: 1,
+    createdAt: now,
+    updatedAt: now,
+  }
+
+  // Create DB record with draftSchema — no Walrus write, no credit deduction
+  const form = await prisma.form.create({
+    data: {
+      id: formId,
+      slug,
+      title: input.title || 'Untitled Form',
+      description: input.description,
+      ownerId: adminId,
+      schemaBlobId: null,          // not yet on Walrus
+      draftSchema: draftSchema as unknown as Prisma.InputJsonValue,
+      mode: input.mode,
+      encryptionMode: input.encryptionMode,
+      sealPolicyId: null,
+      isPublished: false,
+    },
+  })
+
+  return toFormMetadata(form)
+}
+
+/**
+ * Update an existing form draft (DB-only, no Walrus write).
+ *
+ * Persists updated fields and metadata into `draftSchema`.
+ * Does not write to Walrus — that happens on explicit publish.
+ */
+export async function updateFormDraft(
+  formId: string,
+  adminId: string,
+  input: { title?: string; description?: string; mode?: string; encryptionMode?: string; fields?: FieldConfig[] },
+): Promise<FormMetadata> {
+  const existing = await prisma.form.findUnique({ where: { id: formId } })
+  if (!existing) {
+    throw new ServiceError(`Form "${formId}" not found.`, 'NOT_FOUND', 404)
+  }
+  if (existing.ownerId !== adminId) {
+    throw new ServiceError('You do not have permission to update this form.', 'FORBIDDEN', 403)
+  }
+
+  const now = new Date().toISOString()
+
+  // Merge existing draftSchema with updates
+  const existingDraft = (existing.draftSchema as FormSchema | null) ?? {
+    id: existing.id,
+    title: existing.title,
+    description: existing.description ?? undefined,
+    slug: existing.slug,
+    mode: existing.mode as FormSchema['mode'],
+    encryptionMode: existing.encryptionMode as FormSchema['encryptionMode'],
+    fields: [],
+    version: 1,
+    createdAt: existing.createdAt.toISOString(),
+    updatedAt: now,
+  }
+
+  const updatedFields = input.fields
+    ? input.fields.map((f, index) => ({ ...f, id: f.id || crypto.randomUUID(), order: f.order ?? index }))
+    : existingDraft.fields
+
+  const updatedDraft: FormSchema = {
+    ...existingDraft,
+    title: input.title ?? existingDraft.title,
+    description: input.description !== undefined ? input.description : existingDraft.description,
+    mode: (input.mode as FormSchema['mode']) ?? existingDraft.mode,
+    encryptionMode: (input.encryptionMode as FormSchema['encryptionMode']) ?? existingDraft.encryptionMode,
+    fields: updatedFields,
+    version: (existingDraft.version ?? 1) + 1,
+    updatedAt: now,
+  }
+
+  const form = await prisma.form.update({
+    where: { id: formId },
+    data: {
+      title: input.title ?? existing.title,
+      description: input.description !== undefined ? input.description : existing.description,
+      mode: (input.mode as typeof existing.mode) ?? existing.mode,
+      encryptionMode: (input.encryptionMode as typeof existing.encryptionMode) ?? existing.encryptionMode,
+      draftSchema: updatedDraft as unknown as Prisma.InputJsonValue,
+    },
+  })
+
+  return toFormMetadata(form)
+}
 
 /**
  * Create a new form.
- *
- * Flow:
- *   1. Generate or validate slug uniqueness
- *   2. Assemble FormSchema
- *   3. Serialize to JSON
- *   4. Check storage credits
- *   5. Write schema to Walrus
- *   6. Index form metadata in PostgreSQL (with schemaBlobId)
- *   7. Create BlobReference record
- *   8. Deduct credits
  *
  * @param adminId  The authenticated admin's user ID.
  * @param input    The form creation input.
@@ -491,70 +620,112 @@ export async function updateForm(
 }
 
 /**
- * Publish a form, making it publicly accessible at its slug URL.
+ * Publish a form using the infrastructure wallet.
  *
- * Marks the form as published in PostgreSQL. The slug becomes immutable
- * from this point forward (R4.8, R19.4).
+ * For drafts (schemaBlobId is null): reads the draftSchema from PostgreSQL,
+ * writes it to Walrus using the infra wallet, then marks published.
+ * For already-Walrus-indexed forms (schemaBlobId exists): simply marks published.
+ *
+ * No wallet interaction is required from the user — the infra wallet
+ * sponsors all Walrus writes.
  *
  * @param formId   The ID of the form to publish.
  * @param adminId  The authenticated admin's user ID (must own the form).
- * @returns        The public URL for the published form.
- * @throws ServiceError with code 'NOT_FOUND' if the form does not exist.
- * @throws ServiceError with code 'FORBIDDEN' if adminId does not own the form.
- * @throws ServiceError with code 'SCHEMA_MISSING' if the form has no schema blob.
+ * @returns        The public URL and slug for the published form.
  */
 export async function publishForm(
   formId: string,
   adminId: string,
-): Promise<{ publicUrl: string }> {
+): Promise<{ publicUrl: string; slug: string }> {
   const form = await prisma.form.findUnique({ where: { id: formId } })
   if (!form) {
-    throw new ServiceError(
-      `Form with ID "${formId}" was not found.`,
-      'NOT_FOUND',
-      404,
-    )
+    throw new ServiceError(`Form with ID "${formId}" was not found.`, 'NOT_FOUND', 404)
   }
   if (form.ownerId !== adminId) {
-    throw new ServiceError(
-      'You do not have permission to publish this form.',
-      'FORBIDDEN',
-      403,
-    )
-  }
-  if (!form.schemaBlobId) {
-    throw new ServiceError(
-      'This form cannot be published because it has no schema stored on Walrus. Please save the form first.',
-      'SCHEMA_MISSING',
-      400,
-    )
+    throw new ServiceError('You do not have permission to publish this form.', 'FORBIDDEN', 403)
   }
 
-  // Mark as published
+  let blobId = form.schemaBlobId
+
+  if (!blobId) {
+    // Draft path: write schema to Walrus using infra wallet
+    const draftSchema = form.draftSchema as FormSchema | null
+
+    if (!draftSchema) {
+      throw new ServiceError(
+        'This form has no content to publish. Please add fields and save first.',
+        'SCHEMA_MISSING',
+        400,
+      )
+    }
+
+    // Ensure the schema title is current
+    const schemaToPublish: FormSchema = {
+      ...draftSchema,
+      title: form.title,
+      description: form.description ?? undefined,
+      updatedAt: new Date().toISOString(),
+    }
+
+    const jsonString = JSON.stringify(schemaToPublish)
+
+    // Write to Walrus — infra wallet sponsors the write
+    try {
+      const result = await executeWalrusWrite(
+        Buffer.from(jsonString, 'utf-8'),
+        'application/json',
+      )
+      blobId = result.blobId
+    } catch (walrusErr) {
+      // In dev/testnet with DEV_BYPASS_STORAGE, use a deterministic placeholder
+      if (process.env.DEV_BYPASS_STORAGE === 'true') {
+        const { createHash } = await import('node:crypto')
+        blobId = `dev-blob-${createHash('sha256').update(jsonString).digest('hex').slice(0, 16)}`
+        console.warn('[FormService.publishForm] Walrus write bypassed (DEV_BYPASS_STORAGE=true), blobId:', blobId)
+      } else {
+        console.error('[FormService.publishForm] Walrus write failed:', walrusErr instanceof Error ? walrusErr.message : walrusErr)
+        throw new ServiceError(
+          'Failed to store form on Walrus. Please try again.',
+          'WALRUS_WRITE_FAILED',
+          503,
+        )
+      }
+    }
+
+    // Create BlobReference for the new blob
+    try {
+      await prisma.blobReference.create({
+        data: {
+          walrusBlobId: blobId,
+          blobType: 'form_schema',
+          sizeBytes: Buffer.byteLength(jsonString, 'utf-8'),
+          formId: form.id,
+        },
+      })
+    } catch {
+      // BlobReference creation is best-effort — don't fail publish
+    }
+  }
+
+  // Mark as published with the blob ID
   const published = await prisma.form.update({
     where: { id: formId },
     data: {
       isPublished: true,
       publishedAt: new Date(),
+      schemaBlobId: blobId,
     },
   })
 
-  const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL ?? 'https://swrap.app'
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://swrap.app'
   const publicUrl = `${appUrl}/f/${published.slug}`
 
-  return { publicUrl }
+  return { publicUrl, slug: published.slug }
 }
 
 /**
  * Retrieve a published form's schema from Walrus by its slug.
- *
- * Only published forms are accessible via this method (public form renderer).
- *
- * @param slug  The form's URL slug.
- * @returns     The full FormSchema fetched from Walrus.
- * @throws ServiceError with code 'NOT_FOUND' if no published form has this slug.
- * @throws ServiceError with code 'SCHEMA_MISSING' if the form has no blob ID.
+ * Falls back to draftSchema if Walrus is unavailable.
  */
 export async function getFormBySlug(slug: string): Promise<FormSchema> {
   const form = await prisma.form.findUnique({
@@ -567,23 +738,35 @@ export async function getFormBySlug(slug: string): Promise<FormSchema> {
       404,
     )
   }
-  if (!form.schemaBlobId) {
-    throw new ServiceError(
-      'This form does not have a schema stored on Walrus.',
-      'SCHEMA_MISSING',
-      500,
-    )
+
+  // Try Walrus first
+  if (form.schemaBlobId) {
+    try {
+      return await readBlobAsJson<FormSchema>(form.schemaBlobId)
+    } catch {
+      // Walrus read failed — fall back to draftSchema if available
+      if (form.draftSchema) {
+        console.warn(`[FormService.getFormBySlug] Walrus read failed for ${slug}, falling back to draftSchema`)
+        return form.draftSchema as unknown as FormSchema
+      }
+      throw new ServiceError(
+        'Failed to fetch the form schema. Please try again.',
+        'WALRUS_READ_FAILED',
+        503,
+      )
+    }
   }
 
-  try {
-    return await readBlobAsJson<FormSchema>(form.schemaBlobId)
-  } catch {
-    throw new ServiceError(
-      'Failed to fetch the form schema from Walrus. Please try again.',
-      'WALRUS_READ_FAILED',
-      503,
-    )
+  // No Walrus blob — use draftSchema as fallback
+  if (form.draftSchema) {
+    return form.draftSchema as unknown as FormSchema
   }
+
+  throw new ServiceError(
+    'This form does not have a schema stored on Walrus.',
+    'SCHEMA_MISSING',
+    500,
+  )
 }
 
 /**
@@ -642,7 +825,7 @@ export async function getFormById(
 export async function getFormWithSchema(
   formId: string,
   adminId: string,
-): Promise<{ form: FormMetadata; schema: FormSchema }> {
+): Promise<{ form: FormMetadata; schema: FormSchema | null }> {
   const form = await prisma.form.findUnique({
     where: { id: formId },
     include: {
@@ -653,40 +836,27 @@ export async function getFormWithSchema(
   })
 
   if (!form) {
-    throw new ServiceError(
-      `Form with ID "${formId}" was not found.`,
-      'NOT_FOUND',
-      404,
-    )
+    throw new ServiceError(`Form with ID "${formId}" was not found.`, 'NOT_FOUND', 404)
   }
   if (form.ownerId !== adminId) {
-    throw new ServiceError(
-      'You do not have permission to access this form.',
-      'FORBIDDEN',
-      403,
-    )
+    throw new ServiceError('You do not have permission to access this form.', 'FORBIDDEN', 403)
   }
 
+  const metadata = toFormMetadata(form, form._count.submissions)
+
+  // Return draftSchema if no Walrus blob yet (draft case)
   if (!form.schemaBlobId) {
-    throw new ServiceError(
-      'This form does not have a schema stored on Walrus.',
-      'SCHEMA_MISSING',
-      500,
-    )
+    const schema = form.draftSchema ? (form.draftSchema as unknown as FormSchema) : null
+    return { form: metadata, schema }
   }
 
   try {
     const schema = await readBlobAsJson<FormSchema>(form.schemaBlobId)
-    return {
-      form: toFormMetadata(form, form._count.submissions),
-      schema,
-    }
+    return { form: metadata, schema }
   } catch {
-    throw new ServiceError(
-      'Failed to fetch the form schema from Walrus. Please try again.',
-      'WALRUS_READ_FAILED',
-      503,
-    )
+    // Walrus read failed — fall back to draftSchema
+    const schema = form.draftSchema ? (form.draftSchema as unknown as FormSchema) : null
+    return { form: metadata, schema }
   }
 }
 

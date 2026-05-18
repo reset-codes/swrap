@@ -1,31 +1,34 @@
 'use client';
 
 /**
- * useAutosave — subscribes to form content changes (fields + title) and drives
- * the autosave status badge in TopBar.
+ * useAutosave — debounced autosave to localStorage.
  *
- * Behaviour:
- *   - Skips the initial mount (ref guard) so the badge stays idle on load.
- *   - On any subsequent change: immediately sets status to 'saving', then after
- *     1500 ms sets it to 'saved'.
- *   - If the dependency changes again before the timer fires, the previous timer
- *     is cancelled via the useEffect cleanup (standard debounce pattern).
- *   - No network calls, no localStorage writes — the Zustand store IS the
- *     in-memory state; Walrus is the durable store (invoked only on explicit Publish).
+ * Watches form fields + title. On any change (after initial mount):
+ *   1. Sets status to 'saving'
+ *   2. After 1200ms debounce, writes to localStorage
+ *   3. On success: sets 'saved'
+ *   4. On failure: sets 'error'
  *
- * Requirements: 7.1, 7.2, 7.3, 7.4
+ * The debounce timer is cancelled if content changes again before it fires,
+ * preventing excessive writes on rapid keystrokes.
+ *
+ * Requirements: Phase 1 Task 6 (autosave UX)
  */
 
 import { useEffect, useRef } from 'react';
 import { useFormBuilderStore } from '../../../stores/form-builder-store';
+
+const DRAFT_KEY = 'swrap-builder-draft@1';
+const DEBOUNCE_MS = 1200;
 
 export function useAutosave(): void {
   const fields = useFormBuilderStore((s) => s.fields);
   const title = useFormBuilderStore((s) => s.title);
   const setAutosaveStatus = useFormBuilderStore((s) => s.setAutosaveStatus);
 
-  // Guard: skip the very first render so the badge stays 'idle' on mount.
+  // Skip first render
   const isInitialMount = useRef(true);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (isInitialMount.current) {
@@ -33,15 +36,22 @@ export function useAutosave(): void {
       return;
     }
 
-    // Immediately signal that a save is in progress.
     setAutosaveStatus('saving');
 
-    const timer = setTimeout(() => {
-      // Pure in-memory status transition — no I/O.
-      setAutosaveStatus('saved');
-    }, 1500);
+    if (timerRef.current) clearTimeout(timerRef.current);
 
-    // Cancel the pending timer if fields/title change again before it fires.
-    return () => clearTimeout(timer);
+    timerRef.current = setTimeout(() => {
+      try {
+        const payload = JSON.stringify({ title, fields, savedAt: new Date().toISOString() });
+        localStorage.setItem(DRAFT_KEY, payload);
+        setAutosaveStatus('saved');
+      } catch {
+        setAutosaveStatus('error');
+      }
+    }, DEBOUNCE_MS);
+
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   }, [fields, title, setAutosaveStatus]);
 }

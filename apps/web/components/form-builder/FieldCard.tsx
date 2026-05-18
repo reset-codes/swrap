@@ -98,12 +98,16 @@ export interface FieldCardProps {
 const TYPE_LABELS: Record<string, string> = {
   text: 'Short Text',
   textarea: 'Long Text',
+  number: 'Number',
   email: 'Email',
+  phone: 'Phone',
   url: 'URL',
   select: 'Dropdown',
   checkbox: 'Checkbox',
   star_rating: 'Star Rating',
   wallet_address: 'Wallet Address',
+  file_upload: 'File Upload',
+  image_upload: 'Image Upload',
 };
 
 function getTypeLabel(type: string): string {
@@ -119,12 +123,16 @@ function getPlaceholderPreview(field: PocField): string {
   const defaults: Record<string, string> = {
     text: 'Type your answer\u2026',
     textarea: 'Write something\u2026',
+    number: 'Enter a number\u2026',
     email: 'you@example.com',
+    phone: '+1 (555) 000-0000',
     url: 'https://\u2026',
     select: 'Choose an option\u2026',
     checkbox: 'Check if applicable',
     star_rating: '\u2605 \u2605 \u2605 \u2605 \u2605',
     wallet_address: '0x\u2026',
+    file_upload: 'Drag & drop or click to upload',
+    image_upload: 'Drag & drop or click to upload an image',
   };
   return defaults[field.type] ?? 'Enter a value\u2026';
 }

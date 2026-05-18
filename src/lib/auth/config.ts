@@ -199,8 +199,49 @@ export const authConfig: NextAuthConfig = {
     async jwt({ token, user }) {
       if (user) {
         // First sign-in: copy id and role from the user object into the token.
-        token.id = user.id;
-        token.role = user.role ?? 'admin';
+        // IMPORTANT: user.id may be the Firebase UID if the DB was unavailable
+        // during signIn callback. We always attempt a DB lookup here to ensure
+        // the token carries the Postgres CUID, not the Firebase UID.
+        const emailToLookup = user.email ?? (token.email as string | undefined);
+        if (emailToLookup) {
+          try {
+            const { prisma } = await import('@/lib/prisma/client');
+            const dbUser = await prisma.user.findUnique({
+              where: { email: emailToLookup },
+              select: { id: true, role: true },
+            });
+            if (dbUser) {
+              token.id = dbUser.id;
+              token.role = dbUser.role as UserRole;
+            } else {
+              // User doesn't exist yet — upsert now so they can use the app
+              const role = await resolveRoleForNewUser();
+              const created = await prisma.$transaction(async (tx) => {
+                const u = await tx.user.create({
+                  data: {
+                    email: emailToLookup,
+                    name: user.name ?? null,
+                    image: user.image ?? null,
+                    role,
+                  },
+                });
+                await tx.storageCredit.create({
+                  data: { userId: u.id, balance: 100 },
+                });
+                return u;
+              });
+              token.id = created.id;
+              token.role = role;
+            }
+          } catch {
+            // DB unavailable — fall back to whatever user.id was set to
+            token.id = user.id;
+            token.role = user.role ?? 'admin';
+          }
+        } else {
+          token.id = user.id;
+          token.role = user.role ?? 'admin';
+        }
       } else if (token.email && !token.role) {
         // Token refresh without a fresh user object — re-fetch role from DB
         try {

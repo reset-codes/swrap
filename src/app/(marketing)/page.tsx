@@ -124,7 +124,10 @@ function Nav() {
   return (
     <header className="fixed top-0 left-0 right-0 z-50 border-b border-white/[0.06] bg-[#0A0A0A]/80 backdrop-blur-md">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-        <span className="text-base font-semibold tracking-tight text-[#FAFAFA]">Swrap</span>
+        <Link href="/" className="flex items-center gap-2.5">
+          <img src="/icon.svg" alt="Swrap" className="h-6 w-6" />
+          <span className="text-base font-semibold tracking-tight text-[#FAFAFA]">Swrap</span>
+        </Link>
         <nav className="flex items-center gap-2">
           <Button
             variant="ghost"

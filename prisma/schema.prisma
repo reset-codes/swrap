@@ -78,6 +78,7 @@ model Form {
   description    String?
   ownerId        String
   schemaBlobId   String?        // Walrus blob ID for the form schema — null until published
+  draftSchema    Json?          // Full form schema JSON for draft persistence (fields included)
   mode           FormMode       @default(table)
   encryptionMode EncryptionMode @default(none)
   sealPolicyId   String?        // Seal policy ID for encrypted forms

@@ -27,6 +27,9 @@ export const FIELD_TYPES = [
   'url',
   'star_rating',
   'wallet_address',
+  'phone',
+  'file_upload',
+  'image_upload',
 ] as const;
 
 export type FieldType = (typeof FIELD_TYPES)[number];
