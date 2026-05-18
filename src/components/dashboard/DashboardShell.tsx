@@ -40,7 +40,7 @@ function ShellContent({ children, user }: DashboardShellProps) {
         </div>
 
         {/* Page content */}
-        <main className="flex-1 overflow-auto bg-background" id="main-content">
+        <main className="flex flex-1 flex-col overflow-hidden bg-background" id="main-content">
           {children}
         </main>
       </div>

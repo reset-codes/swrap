@@ -1,5 +1,15 @@
 'use client';
 
+/**
+ * @deprecated LEGACY — No longer the active form settings component.
+ *
+ * Replaced by: TopBar + InspectorPanel inside CanvasBuilderPage
+ * Active route: /dashboard/forms/new → CanvasBuilderPage
+ *
+ * This file is retained for reference only. Do not import it from any
+ * new route or feature. It will be deleted in a future cleanup pass.
+ */
+
 import { useState, useId, useEffect, useRef } from 'react';
 import { Lock, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';

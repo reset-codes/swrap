@@ -109,7 +109,7 @@ export function Canvas({
      */
     <div className={['group flex-1 overflow-y-auto', themeConfig.canvas].join(' ')}>
       {/* Centred content column */}
-      <div className="mx-auto max-w-2xl px-4 py-10">
+      <div className="mx-auto max-w-2xl px-4 py-6">
 
         {/* -------------------------------------------------------------- */}
         {/* BannerEditor — "Add cover" affordance / cover image (task 19)   */}

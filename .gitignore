@@ -48,3 +48,4 @@ prisma/migrations/
 .idea/
 *.swp
 *.swo
+.env*.local

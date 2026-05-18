@@ -75,14 +75,16 @@ export const THEME_CONFIG: Record<FormTheme, ThemeConfig> = {
     swatchColor: '#f8fafc', // slate-50
   },
 
-  // ── Dark — full dark mode using design token class names ─────────────────
+  // ── Dark — full dark mode using static Tailwind classes ──────────────────
+  // NOTE: must use static class strings — dynamic template literals with token
+  // values are not safe with Tailwind JIT (purged in production builds).
   dark: {
-    canvas: `bg-[${color.bg.appDark}]`,
-    card: `bg-[${color.bg.surfaceDark}] border border-[${color.border.subtleDark}]`,
+    canvas: 'bg-gray-950',
+    card: 'bg-gray-900 border border-gray-700',
     font: typography.family.sans,
-    accent: color.accent.baseDark,
+    accent: color.accent.base,
     label: 'Dark',
-    swatchColor: color.bg.appDark,
+    swatchColor: '#030712', // gray-950
   },
 };
 

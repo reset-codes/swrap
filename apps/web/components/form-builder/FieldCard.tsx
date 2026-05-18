@@ -366,7 +366,8 @@ export function FieldCard({
           ref={dragHandleRef}
           {...dragHandleListeners}
           {...dragHandleAttributes}
-          role="img"
+          role="button"
+          tabIndex={0}
           aria-label="Drag to reorder"
           className="cursor-grab rounded p-1 text-text-tertiary transition-colors hover:text-text-primary active:cursor-grabbing"
         >

@@ -133,8 +133,9 @@ export function TopBar({
   }
 
   function handleBack() {
-    if (typeof window !== 'undefined' && window.history.length > 1) {
-      window.history.back();
+    // Navigate to forms list — we are always nested under /dashboard/forms
+    if (typeof window !== 'undefined') {
+      window.location.href = '/dashboard/forms';
     }
   }
 

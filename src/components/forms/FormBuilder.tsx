@@ -1,5 +1,15 @@
 'use client';
 
+/**
+ * @deprecated LEGACY — No longer the active form builder.
+ *
+ * Replaced by: apps/web/components/form-builder/CanvasBuilderPage.tsx
+ * Active route: /dashboard/forms/new → CanvasBuilderPage
+ *
+ * This file is retained for reference only. Do not import it from any
+ * new route or feature. It will be deleted in a future cleanup pass.
+ */
+
 import { useState, useCallback } from 'react';
 import { AddFieldButton } from './AddFieldButton';
 import { FieldList } from './FieldList';

@@ -30,7 +30,7 @@
  *   - DragOverlay renders a ghost card (opacity 0.8, scale 1.02) in a portal.
  *
  * Layout structure:
- *   <root: flex h-screen flex-col overflow-hidden>
+ *   <root: flex flex-1 min-h-0 flex-col overflow-hidden>
  *     <TopBar />
  *     <DndContext>
  *       <row: flex flex-1 overflow-hidden>
@@ -41,6 +41,11 @@
  *       <DragOverlay />
  *     </DndContext>
  *   </root>
+ *
+ * Layout note: uses flex-1/min-h-0 instead of h-screen so the builder fills
+ * its flex container (DashboardShell main area) rather than claiming the full
+ * viewport. DashboardShell must expose a flex-col h-full main area — see
+ * DashboardShell.tsx.
  *
  * Requirements: 1.1–1.5, 3.6, 3.7, 4.9, 4.10, 6.1, 6.2, 6.8
  */
@@ -174,7 +179,7 @@ export function CanvasBuilderPage({ formBlobId: _formBlobId }: CanvasBuilderPage
 
   return (
     <div
-      className="flex h-screen flex-col overflow-hidden bg-bg-app"
+      className="flex flex-1 min-h-0 flex-col overflow-hidden bg-bg-app"
       aria-label="Form builder"
     >
       {/* Top bar — full width, fixed h-14 */}
