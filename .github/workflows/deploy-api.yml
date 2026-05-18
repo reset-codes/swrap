@@ -54,8 +54,7 @@ jobs:
 
       - name: Type check
         # Pre-existing ESM/CJS interop errors in packages/sui and packages/seal source
-        # files mean tsc exits non-zero. Tests are the real quality gate; type-check
-        # is informational only until those upstream issues are fixed.
+        # files mean tsc exits non-zero. Tests are the real quality gate.
         run: npm run type-check
         continue-on-error: true
 
@@ -121,7 +120,7 @@ jobs:
             git fetch origin main
             git reset --hard "origin/main"
 
-            # ── Build and deploy (zero-downtime via Docker Compose) ──────────
+            # ── Build and deploy ─────────────────────────────────────────────
             echo ""
             echo "▶ Building and deploying containers..."
             COMMIT_SHA="$COMMIT_SHA" docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" \
@@ -134,27 +133,30 @@ jobs:
               npx node-pg-migrate up --migrations-dir db/migrations --database-url-var DATABASE_URL \
               2>&1 || echo "  ⚠ Migration step completed (check output above)"
 
-            # ── Health check with retries ────────────────────────────────────
+            # ── Health check via Docker container health status ───────────────
+            # Note: port 4000 is NOT exposed to host — Nginx proxies externally.
+            # We check Docker's own container health status instead of curl localhost.
             echo ""
-            echo "▶ Waiting for API to be healthy..."
-            sleep 5
+            echo "▶ Waiting for API container to be healthy..."
+            sleep 10
 
             MAX_RETRIES=12
             RETRY=0
             HEALTHY=false
 
             while [ $RETRY -lt $MAX_RETRIES ]; do
-              if curl -sf http://localhost:4000/health | grep -q '"status":"ok"'; then
+              HEALTH=$(docker inspect --format='{{.State.Health.Status}}' swrap-api-1 2>/dev/null || echo "unknown")
+              if [ "$HEALTH" = "healthy" ]; then
                 HEALTHY=true
                 break
               fi
               RETRY=$((RETRY + 1))
-              echo "  Waiting... (attempt $RETRY/$MAX_RETRIES)"
+              echo "  Waiting... (attempt $RETRY/$MAX_RETRIES, container=$HEALTH)"
               sleep 5
             done
 
             if [ "$HEALTHY" = true ]; then
-              echo "  ✓ API is healthy at commit $SHORT_SHA"
+              echo "  ✓ Container is healthy at commit $SHORT_SHA"
               echo ""
               echo "▶ Container status:"
               docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps
@@ -170,14 +172,14 @@ jobs:
               echo ""
               echo "▶ Rolling back to $PREV_SHA..."
 
-              # Rollback: reset to previous commit and redeploy
               if [ "$PREV_SHA" != "none" ]; then
                 git reset --hard "$PREV_SHA"
-                docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" \
+                COMMIT_SHA="$PREV_SHA" docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" \
                   up -d --build --remove-orphans
-                sleep 10
+                sleep 15
 
-                if curl -sf http://localhost:4000/health | grep -q '"status":"ok"'; then
+                ROLLBACK_HEALTH=$(docker inspect --format='{{.State.Health.Status}}' swrap-api-1 2>/dev/null || echo "unknown")
+                if [ "$ROLLBACK_HEALTH" = "healthy" ]; then
                   echo "  ✓ Rollback successful — running at ${PREV_SHA:0:7}"
                 else
                   echo "  ✗ Rollback also failed — MANUAL INTERVENTION REQUIRED"
