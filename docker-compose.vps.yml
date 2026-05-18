@@ -37,6 +37,10 @@ services:
     restart: unless-stopped
     networks:
       - swrap_internal
+    # Expose on host port 5432 so the Vercel frontend (Next.js/Prisma) can connect.
+    # Firewall restricts which IPs can reach this port — see ufw rules.
+    ports:
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db/migrations:/docker-entrypoint-initdb.d:ro
