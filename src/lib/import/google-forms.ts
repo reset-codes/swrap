@@ -9,6 +9,7 @@
  */
 
 import type { FieldConfig, FieldOption, FieldType } from '@/types/form'
+import crypto from 'node:crypto'
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 

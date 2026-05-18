@@ -13,6 +13,8 @@
  * No external dependencies — uses Node.js fetch (Next.js 15 has it globally).
  */
 
+import crypto from 'node:crypto'
+
 // ─── Lightweight field type (matches PocField in apps/web) ───────────────────
 // Defined locally to avoid a cross-workspace import dependency.
 

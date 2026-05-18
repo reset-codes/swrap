@@ -11,6 +11,7 @@
  */
 
 import { prisma } from '@/lib/prisma/client'
+import crypto from 'node:crypto'
 import { executeWalrusWrite, executeWalrusRead } from '@/lib/wallet/manager'
 import type {
   CreateFormInput,

@@ -24,6 +24,7 @@
  */
 
 import type { FieldConfig, FieldOption, FieldType } from '@/types/form'
+import crypto from 'node:crypto'
 
 // ─── Airtable field type map ──────────────────────────────────────────────────
 

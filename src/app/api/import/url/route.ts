@@ -16,6 +16,7 @@
 
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import crypto from 'node:crypto'
 import { auth } from '@/lib/auth'
 import { apiError, apiSuccess } from '@/types/api'
 import { scrapeAirtableSharedForm, isValidAirtableShareUrl } from '@/lib/importers/airtable-scraper'

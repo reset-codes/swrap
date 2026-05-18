@@ -11,6 +11,7 @@
  */
 
 import { prisma } from '@/lib/prisma/client'
+import crypto from 'node:crypto'
 import { processSubmissionEncryption } from '@/services/EncryptionService'
 import { ServiceError } from '@/services/FormService'
 import {
