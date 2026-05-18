@@ -48,6 +48,7 @@ vi.mock('./infrastructure-wallet', () => ({
 vi.mock('./walrus-service', () => ({
   walrusPut: vi.fn(),
   walrusBlobExists: vi.fn(),
+  walrusPutWithCliFallback: vi.fn(),
   WalrusPutError: class WalrusPutError extends Error {
     code = 'WALRUS_PUT_FAILED';
     constructor(blobId: string | undefined, attempts: number, cause: unknown) {
@@ -71,7 +72,7 @@ vi.mock('./audit-log', () => ({
 }));
 
 import { sealEncrypt } from './infrastructure-wallet';
-import { walrusPut, walrusBlobExists } from './walrus-service';
+import { walrusPut, walrusBlobExists, walrusPutWithCliFallback } from './walrus-service';
 
 // ---------------------------------------------------------------------------
 // In-memory Db stub for tests
@@ -134,7 +135,7 @@ describe('orchestrateFormCreate', () => {
   beforeEach(() => {
     db = makeDb();
     vi.clearAllMocks();
-    vi.mocked(walrusPut).mockResolvedValue({ blobId: BLOB_ID, sizeBytes: 42 });
+    vi.mocked(walrusPutWithCliFallback).mockResolvedValue({ blobId: BLOB_ID, sizeBytes: 42 });
     vi.mocked(walrusBlobExists).mockResolvedValue(true);
   });
 
@@ -266,7 +267,7 @@ describe('orchestrateFormCreate', () => {
   });
 
   it('transitions job to failed and throws when walrusPut fails', async () => {
-    vi.mocked(walrusPut).mockRejectedValue(new Error('Network error'));
+    vi.mocked(walrusPutWithCliFallback).mockRejectedValue(new Error('Network error'));
 
     await expect(
       orchestrateFormCreate(
@@ -314,8 +315,8 @@ describe('orchestrateFormCreate', () => {
 
   it('canonicalizes JSON deterministically (sorted keys)', async () => {
     // Two calls with same content but different key order should produce same digest
-    vi.mocked(walrusPut).mockResolvedValueOnce({ blobId: 'blob-a', sizeBytes: 10 });
-    vi.mocked(walrusPut).mockResolvedValueOnce({ blobId: 'blob-b', sizeBytes: 10 });
+    vi.mocked(walrusPutWithCliFallback).mockResolvedValueOnce({ blobId: 'blob-a', sizeBytes: 10 });
+    vi.mocked(walrusPutWithCliFallback).mockResolvedValueOnce({ blobId: 'blob-b', sizeBytes: 10 });
 
     const result1 = await orchestrateFormCreate(
       { formDefinition: { b: 2, a: 1 }, privacyMode: 'public' },
@@ -344,7 +345,7 @@ describe('orchestrateSubmissionCreate', () => {
   beforeEach(() => {
     db = makeDb();
     vi.clearAllMocks();
-    vi.mocked(walrusPut).mockResolvedValue({ blobId: BLOB_ID, sizeBytes: 55 });
+    vi.mocked(walrusPutWithCliFallback).mockResolvedValue({ blobId: BLOB_ID, sizeBytes: 55 });
     vi.mocked(walrusBlobExists).mockResolvedValue(true);
   });
 
@@ -467,7 +468,7 @@ describe('orchestrateSubmissionCreate', () => {
 
   it('transitions job to failed when walrusPut fails', async () => {
     const form = seedForm('public');
-    vi.mocked(walrusPut).mockRejectedValue(new Error('PUT error'));
+    vi.mocked(walrusPutWithCliFallback).mockRejectedValue(new Error('PUT error'));
 
     await expect(
       orchestrateSubmissionCreate(
@@ -547,7 +548,7 @@ describe('orchestrateFileCreate', () => {
   beforeEach(() => {
     db = makeDb();
     vi.clearAllMocks();
-    vi.mocked(walrusPut).mockResolvedValue({ blobId: BLOB_ID, sizeBytes: 200 });
+    vi.mocked(walrusPutWithCliFallback).mockResolvedValue({ blobId: BLOB_ID, sizeBytes: 200 });
     vi.mocked(walrusBlobExists).mockResolvedValue(true);
   });
 
@@ -616,7 +617,7 @@ describe('orchestrateFileCreate', () => {
 
   it('transitions job to failed when walrusPut fails', async () => {
     const sub = seedSubmission();
-    vi.mocked(walrusPut).mockRejectedValue(new Error('PUT error'));
+    vi.mocked(walrusPutWithCliFallback).mockRejectedValue(new Error('PUT error'));
 
     await expect(
       orchestrateFileCreate(
