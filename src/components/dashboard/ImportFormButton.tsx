@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { FileDown, Loader2 } from 'lucide-react';
+import { FileDown, Loader2, Link as LinkIcon } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -12,12 +12,54 @@ type ImportSource = 'typeform' | 'google-forms' | 'airtable';
 export function ImportFormButton() {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
-  const [source, setSource] = useState<ImportSource>('typeform');
+  const [source, setSource] = useState<ImportSource>('airtable');
   const [jsonInput, setJsonInput] = useState('');
+  const [airtableUrl, setAirtableUrl] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleImport = async () => {
+  // ── Airtable URL import ───────────────────────────────────────────────────
+
+  const handleAirtableUrlImport = async () => {
+    setError(null);
+    setIsImporting(true);
+
+    try {
+      const res = await fetch('/api/import/airtable-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: airtableUrl.trim() }),
+      });
+
+      const data = await res.json().catch(() => ({})) as {
+        success?: boolean;
+        data?: { redirectUrl?: string; formId?: string };
+        error?: { message?: string };
+      };
+
+      if (!res.ok) {
+        throw new Error(data?.error?.message ?? 'Import failed');
+      }
+
+      setIsOpen(false);
+      setAirtableUrl('');
+
+      const redirectUrl = data?.data?.redirectUrl;
+      if (redirectUrl) {
+        router.push(redirectUrl);
+      } else {
+        router.refresh();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Import failed');
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  // ── JSON import (Typeform / Google Forms / Airtable schema export) ────────
+
+  const handleJsonImport = async () => {
     setError(null);
     setIsImporting(true);
 
@@ -30,17 +72,17 @@ export function ImportFormButton() {
       });
 
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
+        const data = await res.json().catch(() => ({})) as { error?: { message?: string } };
         throw new Error(data.error?.message || 'Import failed');
       }
 
-      const { data } = await res.json();
+      const { data } = await res.json() as { data: { form?: { id?: string }; formId?: string } };
       setIsOpen(false);
       setJsonInput('');
-      
-      // Navigate to the newly created form
-      if (data.form?.id) {
-        router.push(`/dashboard/forms/${data.form.id}`);
+
+      const formId = data.form?.id ?? data.formId;
+      if (formId) {
+        router.push(`/dashboard/forms/new?draft=${formId}`);
       } else {
         router.refresh();
       }
@@ -50,6 +92,13 @@ export function ImportFormButton() {
       setIsImporting(false);
     }
   };
+
+  // ── Decide which handler to use ───────────────────────────────────────────
+
+  const isAirtableUrl = source === 'airtable';
+  const canSubmit = isAirtableUrl ? airtableUrl.trim().length > 0 : jsonInput.trim().length > 0;
+
+  const handleImport = isAirtableUrl ? handleAirtableUrlImport : handleJsonImport;
 
   return (
     <>
@@ -72,46 +121,82 @@ export function ImportFormButton() {
               Import Form
             </Dialog.Title>
             <Dialog.Description className="text-body text-text-secondary mb-4">
-              Paste the JSON export from your external form provider to import it into Swrap.
+              {isAirtableUrl
+                ? 'Paste a public Airtable share link to import it instantly.'
+                : 'Paste the JSON export from your form provider.'}
             </Dialog.Description>
 
             <div className="space-y-4">
+              {/* Source selector */}
               <div>
                 <label className="text-small font-medium text-text-primary mb-1.5 block">
-                  Source Platform
+                  Source
                 </label>
                 <div className="flex gap-2">
-                  {(['typeform', 'google-forms', 'airtable'] as const).map((s) => (
+                  {(['airtable', 'typeform', 'google-forms'] as const).map((s) => (
                     <button
                       key={s}
                       type="button"
-                      onClick={() => setSource(s)}
+                      onClick={() => { setSource(s); setError(null); }}
                       className={cn(
                         'flex-1 rounded-md border py-2 text-small font-medium transition-colors',
                         source === s
                           ? 'border-accent bg-accent-light text-accent'
-                          : 'border-border bg-white text-text-secondary hover:bg-muted'
+                          : 'border-border bg-white text-text-secondary hover:bg-muted',
                       )}
                     >
-                      {s === 'typeform' ? 'Typeform' : s === 'google-forms' ? 'Google Forms' : 'Airtable'}
+                      {s === 'airtable' ? 'Airtable' : s === 'typeform' ? 'Typeform' : 'Google Forms'}
                     </button>
                   ))}
                 </div>
               </div>
 
-              <div>
-                <label htmlFor="import-json" className="text-small font-medium text-text-primary mb-1.5 block">
-                  JSON Data
-                </label>
-                <textarea
-                  id="import-json"
-                  className="w-full rounded-md border border-border bg-white px-3 py-2 text-small font-mono shadow-sm focus:outline-none focus:ring-2 focus:ring-accent/20"
-                  rows={8}
-                  value={jsonInput}
-                  onChange={(e) => setJsonInput(e.target.value)}
-                  placeholder={`Paste ${source} JSON here...`}
-                />
-              </div>
+              {/* Airtable: URL input */}
+              {isAirtableUrl ? (
+                <div>
+                  <label
+                    htmlFor="import-airtable-url"
+                    className="text-small font-medium text-text-primary mb-1.5 block"
+                  >
+                    Airtable Share Link
+                  </label>
+                  <div className="relative flex items-center">
+                    <LinkIcon className="pointer-events-none absolute left-3 h-4 w-4 text-text-tertiary" aria-hidden="true" />
+                    <input
+                      id="import-airtable-url"
+                      type="url"
+                      className="w-full rounded-md border border-border bg-white pl-9 pr-3 py-2 text-small shadow-sm focus:outline-none focus:ring-2 focus:ring-accent/20"
+                      value={airtableUrl}
+                      onChange={(e) => setAirtableUrl(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && canSubmit) handleImport(); }}
+                      placeholder="https://airtable.com/appXxx/shrXxx"
+                      autoComplete="off"
+                      spellCheck={false}
+                    />
+                  </div>
+                  <p className="mt-1.5 text-xs text-text-tertiary">
+                    Paste the URL from your Airtable shared form (must be a public &ldquo;shr...&rdquo; link).
+                  </p>
+                </div>
+              ) : (
+                /* Non-airtable: JSON textarea */
+                <div>
+                  <label
+                    htmlFor="import-json"
+                    className="text-small font-medium text-text-primary mb-1.5 block"
+                  >
+                    JSON Data
+                  </label>
+                  <textarea
+                    id="import-json"
+                    className="w-full rounded-md border border-border bg-white px-3 py-2 text-small font-mono shadow-sm focus:outline-none focus:ring-2 focus:ring-accent/20"
+                    rows={8}
+                    value={jsonInput}
+                    onChange={(e) => setJsonInput(e.target.value)}
+                    placeholder={`Paste ${source} JSON here...`}
+                  />
+                </div>
+              )}
 
               {error && (
                 <p className="text-small text-error" role="alert">
@@ -124,11 +209,11 @@ export function ImportFormButton() {
               <Button variant="secondary" onClick={() => setIsOpen(false)} disabled={isImporting}>
                 Cancel
               </Button>
-              <Button onClick={handleImport} disabled={isImporting || !jsonInput.trim()}>
+              <Button onClick={handleImport} disabled={isImporting || !canSubmit}>
                 {isImporting ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Importing...
+                    Importing…
                   </>
                 ) : (
                   'Import Form'

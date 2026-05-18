@@ -15,6 +15,7 @@ import { executeWalrusWrite, executeWalrusRead } from '@/lib/wallet/manager'
 import type {
   CreateFormInput,
   FieldConfig,
+  FieldType,
   FormMetadata,
   FormSchema,
   UpdateFormInput,
@@ -57,8 +58,8 @@ const CANVAS_TO_API_TYPE: Record<string, string> = {
   file_upload:   'file_upload',
 }
 
-function normalizeFieldType(type: string): string {
-  return CANVAS_TO_API_TYPE[type] ?? 'short_text'
+function normalizeFieldType(type: string): FieldType {
+  return (CANVAS_TO_API_TYPE[type] ?? 'short_text') as FieldType
 }
 
 // ─── ServiceError ─────────────────────────────────────────────────────────────
@@ -780,7 +781,7 @@ export async function publishForm(
     try {
       await prisma.blobReference.create({
         data: {
-          walrusBlobId: blobId,
+          walrusBlobId: blobId!, // non-null: guaranteed by walrusWriteOk guard above
           blobType: 'form_schema',
           sizeBytes: Buffer.byteLength(jsonString, 'utf-8'),
           formId: form.id,

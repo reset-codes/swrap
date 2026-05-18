@@ -4,6 +4,7 @@ import React from 'react';
 import { Sidebar } from './Sidebar';
 import { MobileSidebarToggle } from './MobileSidebarToggle';
 import { SidebarProvider } from './SidebarContext';
+import { PendingImportRunner } from './PendingImportRunner';
 
 interface DashboardShellProps {
   children: React.ReactNode;
@@ -41,6 +42,7 @@ function ShellContent({ children, user }: DashboardShellProps) {
 
         {/* Page content */}
         <main className="flex flex-1 flex-col overflow-hidden bg-background" id="main-content">
+          <PendingImportRunner />
           {children}
         </main>
       </div>
