@@ -29,6 +29,20 @@ WORKDIR /app
 ARG COMMIT_SHA=unknown
 ENV COMMIT_SHA=${COMMIT_SHA}
 
+# Install Walrus CLI for CLI fallback publisher.
+# Uses the official Walrus binary release for linux/amd64.
+# Set WALRUS_CLI_VERSION to pin a specific version.
+ARG WALRUS_CLI_VERSION=latest
+RUN apk add --no-cache curl ca-certificates && \
+    ARCH=$(uname -m) && \
+    if [ "$ARCH" = "x86_64" ]; then WALRUS_ARCH="x86_64-unknown-linux-musl"; \
+    elif [ "$ARCH" = "aarch64" ]; then WALRUS_ARCH="aarch64-unknown-linux-musl"; \
+    else WALRUS_ARCH="x86_64-unknown-linux-musl"; fi && \
+    echo "Attempting Walrus CLI install for arch: $WALRUS_ARCH" && \
+    (curl -fsSL "https://github.com/MystenLabs/walrus/releases/latest/download/walrus-${WALRUS_ARCH}" \
+      -o /usr/local/bin/walrus && chmod +x /usr/local/bin/walrus && echo "Walrus CLI installed: $(walrus --version 2>&1 | head -1)") || \
+    echo "Walrus CLI install skipped (not available for this arch/release) — HTTP publisher is primary path"
+
 # Copy everything needed to run tsx at runtime
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json

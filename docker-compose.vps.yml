@@ -90,6 +90,10 @@ services:
       SESSION_SECRET: ${SESSION_SECRET}
       API_CORS_ORIGINS: ${API_CORS_ORIGINS}
       API_SECRET_KEY: ${API_SECRET_KEY}
+      # Walrus CLI fallback (optional — only needed if HTTP publisher is unreliable)
+      WALRUS_CLI_PATH: ${WALRUS_CLI_PATH:-walrus}
+      WALRUS_CONFIG_PATH: ${WALRUS_CONFIG_PATH:-}
+      WALRUS_EPOCHS: ${WALRUS_EPOCHS:-1}
     deploy:
       resources:
         limits:
