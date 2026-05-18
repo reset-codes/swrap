@@ -74,7 +74,7 @@ export function AirtableImportHero() {
     setErrorMsg('');
 
     try {
-      const res = await fetch('/api/import/airtable-url', {
+      const res = await fetch('/api/import/url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: trimmed }),

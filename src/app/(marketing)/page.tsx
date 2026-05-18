@@ -156,7 +156,7 @@ function ImportInput({ size = 'lg', autoFocus = false }: { size?: 'sm' | 'lg'; a
     }, 700);
 
     try {
-      const res = await fetch('/api/import/airtable-url', {
+      const res = await fetch('/api/import/url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: trimmed }),

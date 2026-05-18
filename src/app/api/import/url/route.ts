@@ -1,5 +1,5 @@
 /**
- * POST /api/import/airtable-url
+ * POST /api/import/url
  *
  * Accepts a public Airtable shared form URL, scrapes the field schema,
  * and creates a draft form in PostgreSQL ready for the builder.
@@ -152,7 +152,7 @@ export async function POST(request: Request) {
       select: { id: true, title: true },
     })
   } catch (err) {
-    console.error('[POST /api/import/airtable-url] Draft creation failed:', err)
+    console.error('[POST /api/import/url] Draft creation failed:', err)
     return NextResponse.json(
       apiError('INTERNAL_ERROR', 'Failed to save imported form. Please try again.'),
       { status: 500 },
