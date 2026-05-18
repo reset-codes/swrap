@@ -45,7 +45,15 @@ export default async function FormsPage() {
     redirect('/login');
   }
 
-  const forms = await getFormsByOwner(session.user.id);
+  // Wrap in try/catch — if DATABASE_URL is not configured for this environment
+  // (e.g., Vercel deployment without DB env vars), show empty state instead of crashing.
+  let forms: Awaited<ReturnType<typeof getFormsByOwner>> = [];
+  try {
+    forms = await getFormsByOwner(session.user.id);
+  } catch (err) {
+    // DB unavailable — render empty state rather than crashing the page
+    console.error('[FormsPage] Failed to fetch forms:', err instanceof Error ? err.message : err);
+  }
 
   return (
     <div className="flex flex-col h-full">

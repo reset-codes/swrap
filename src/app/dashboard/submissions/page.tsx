@@ -184,7 +184,14 @@ export default async function SubmissionsPage({ searchParams }: SubmissionsPageP
   const page = parsePage(resolvedSearch.page as string | undefined);
 
   // ── Fetch all forms owned by this user ──────────────────────────────────────
-  const forms = await getFormsByOwner(session.user.id);
+  // Wrapped in try/catch — if DATABASE_URL is not configured (e.g., Vercel without
+  // DB env vars set), show empty state instead of crashing the page.
+  let forms: Awaited<ReturnType<typeof getFormsByOwner>> = [];
+  try {
+    forms = await getFormsByOwner(session.user.id);
+  } catch (err) {
+    console.error('[SubmissionsPage] Failed to fetch forms:', err instanceof Error ? err.message : err);
+  }
 
   if (forms.length === 0) {
     return (
