@@ -18,6 +18,7 @@
  */
 
 import { useFormBuilderStore } from '../../../stores/form-builder-store';
+import { useDraftSessionStore } from '../../../stores/draft-session-store';
 import type { PocField } from '../FieldCard';
 import { toast } from '../../ui/Toast';
 
@@ -111,6 +112,7 @@ export function useSaveDraft() {
   const draftFormId = useFormBuilderStore((s) => s.draftFormId);
   const setAutosaveStatus = useFormBuilderStore((s) => s.setAutosaveStatus);
   const setDraftFormId = useFormBuilderStore((s) => s.setDraftFormId);
+  const recordDraftSave = useDraftSessionStore((s) => s.recordDraftSave);
 
   async function saveDraft() {
     setAutosaveStatus('saving');
@@ -159,6 +161,8 @@ export function useSaveDraft() {
         if (!draftFormId && data?.data?.id) {
           const newId = data.data.id;
           setDraftFormId(newId);
+          // Persist the new draft ID to localStorage for cross-session recovery
+          recordDraftSave(newId, title || 'Untitled Form');
           // Update the browser URL to include ?draft=:id so page refresh
           // restores the correct draft context (no navigation, no flicker).
           try {
@@ -168,6 +172,9 @@ export function useSaveDraft() {
           } catch {
             // URL update is best-effort — non-fatal
           }
+        } else if (draftFormId) {
+          // Update the persisted title on every save so the restore banner stays fresh
+          recordDraftSave(draftFormId, title || 'Untitled Form');
         }
         setAutosaveStatus('saved');
         toast.success('Draft saved', { description: 'Your form has been saved.' });

@@ -26,6 +26,7 @@ import http from 'node:http';
 import { loadServerConfig } from './server-config';
 import { createApp } from './app';
 import { detectLegacyConfig } from './middleware/legacy-detector';
+import { bootstrapWalrusCLIWallet } from './services/walrus-wallet-bootstrap';
 
 async function main(): Promise<void> {
   // Detect forbidden legacy env vars before anything else — fail fast
@@ -33,6 +34,10 @@ async function main(): Promise<void> {
 
   // Load and validate configuration at startup — fail fast if misconfigured
   const config = loadServerConfig();
+
+  // Bootstrap Walrus CLI wallet config from INFRASTRUCTURE_WALLET_SECRET.
+  // Non-fatal — primary HTTP publisher path works without it.
+  await bootstrapWalrusCLIWallet();
 
   const app = createApp(config);
   const server = http.createServer(app);

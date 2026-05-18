@@ -41,6 +41,7 @@ import { FieldPickerModal } from './FieldPickerModal';
 import { TemplatePickerModal } from './TemplatePickerModal';
 import type { FormTemplate } from './templates';
 import { useFormBuilderStore } from '../../stores/form-builder-store';
+import { useDraftSessionStore } from '../../stores/draft-session-store';
 import { useAutosave } from './hooks/useAutosave';
 import { useUndoRedoKeys } from './hooks/useUndoRedoKeys';
 import { usePublish } from './hooks/usePublish';
@@ -86,6 +87,12 @@ export function CanvasBuilderPage({
   const publishStatus = useFormBuilderStore((s) => s.publishStatus);
   const draftFormId = useFormBuilderStore((s) => s.draftFormId);
   const setDraftFormId = useFormBuilderStore((s) => s.setDraftFormId);
+
+  // ── Draft session store (persisted — survives refresh + browser reopen) ─
+  const lastDraftFormId = useDraftSessionStore((s) => s.lastDraftFormId);
+  // Use a ref so the mount effect closure captures the value without needing it as a dep
+  const lastDraftFormIdRef = React.useRef(lastDraftFormId);
+  React.useEffect(() => { lastDraftFormIdRef.current = lastDraftFormId; }, [lastDraftFormId]);
 
   // ── Hooks ───────────────────────────────────────────────────────────────
   useAutosave();
@@ -158,7 +165,7 @@ export function CanvasBuilderPage({
 
   // ── Load draft on first mount ────────────────────────────────────────────
   React.useEffect(() => {
-    // Priority 1: load from DB if initialDraftFormId provided
+    // Priority 1: load from DB if initialDraftFormId provided (from ?draft= URL param)
     if (initialDraftFormId) {
       setDraftFormId(initialDraftFormId);
       // Fetch draft from API to restore fields
@@ -169,8 +176,25 @@ export function CanvasBuilderPage({
           const form = data.data.form;
           const draft = form.draftSchema;
           if (draft?.fields && draft.fields.length > 0) {
+            // Normalize options: draftSchema may have options as string[] (canvas-native)
+            // or as {id,label,value}[] (API format from older createFormDraft).
+            // Builder needs string[].
+            const normalizedFields: PocField[] = draft.fields.map((f) => {
+              const rawOptions = (f as PocField & { options?: unknown }).options;
+              let options: string[] | undefined;
+              if (Array.isArray(rawOptions) && rawOptions.length > 0) {
+                // Detect format: if first element is string, it's already string[]
+                if (typeof rawOptions[0] === 'string') {
+                  options = rawOptions as string[];
+                } else {
+                  // API format: [{id, label, value}] → extract label strings
+                  options = (rawOptions as { label?: string }[]).map((o) => o.label ?? '').filter(Boolean);
+                }
+              }
+              return { ...f, ...(options !== undefined ? { options } : {}) };
+            });
             loadDraft({
-              fields: draft.fields,
+              fields: normalizedFields,
               title: draft.title ?? form.title ?? '',
               theme: 'minimal',
               bannerUrl: null,
@@ -181,6 +205,62 @@ export function CanvasBuilderPage({
         })
         .catch(() => {
           // API failed — fall back to localStorage
+          loadFromLocalStorage();
+        });
+      return;
+    }
+
+    // Priority 2: restore from persisted draft session (lastDraftFormId in localStorage).
+    // This fires when the user navigates to /dashboard/forms/new without a ?draft= param
+    // but previously had a draft session (e.g. came back after closing the tab).
+    if (lastDraftFormIdRef.current && !showTemplatePicker) {
+      const savedId = lastDraftFormIdRef.current;
+      setDraftFormId(savedId);
+      // Update URL so a subsequent refresh also recovers correctly
+      try {
+        const url = new URL(window.location.href);
+        if (!url.searchParams.get('draft')) {
+          url.searchParams.set('draft', savedId);
+          window.history.replaceState(null, '', url.toString());
+        }
+      } catch {
+        // non-fatal
+      }
+      fetch(`/api/forms/${savedId}`)
+        .then((res) => res.ok ? res.json() : null)
+        .then((data: { data?: { form?: { title?: string; draftSchema?: { fields?: PocField[]; title?: string } } } } | null) => {
+          if (!data?.data?.form) {
+            // Draft no longer exists in DB — fall back to localStorage
+            loadFromLocalStorage();
+            return;
+          }
+          const form = data.data.form;
+          const draft = form.draftSchema;
+          if (draft?.fields && draft.fields.length > 0) {
+            const normalizedFields: PocField[] = draft.fields.map((f) => {
+              const rawOptions = (f as PocField & { options?: unknown }).options;
+              let options: string[] | undefined;
+              if (Array.isArray(rawOptions) && rawOptions.length > 0) {
+                if (typeof rawOptions[0] === 'string') {
+                  options = rawOptions as string[];
+                } else {
+                  options = (rawOptions as { label?: string }[]).map((o) => o.label ?? '').filter(Boolean);
+                }
+              }
+              return { ...f, ...(options !== undefined ? { options } : {}) };
+            });
+            loadDraft({
+              fields: normalizedFields,
+              title: draft.title ?? form.title ?? '',
+              theme: 'minimal',
+              bannerUrl: null,
+            });
+          } else if (form.title) {
+            loadDraft({ fields: [], title: form.title, theme: 'minimal', bannerUrl: null });
+          }
+        })
+        .catch(() => {
+          // DB fetch failed — fall back to localStorage field data
           loadFromLocalStorage();
         });
       return;

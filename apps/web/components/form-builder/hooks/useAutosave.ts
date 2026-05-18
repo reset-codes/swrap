@@ -17,6 +17,7 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { useFormBuilderStore } from '../../../stores/form-builder-store';
+import { useDraftSessionStore } from '../../../stores/draft-session-store';
 import type { PocField } from '../FieldCard';
 
 const DRAFT_KEY = 'swrap-builder-draft@1';
@@ -53,10 +54,15 @@ export function useAutosave(): void {
   const title = useFormBuilderStore((s) => s.title);
   const draftFormId = useFormBuilderStore((s) => s.draftFormId);
   const setAutosaveStatus = useFormBuilderStore((s) => s.setAutosaveStatus);
+  const recordDraftSave = useDraftSessionStore((s) => s.recordDraftSave);
 
   // Stable ref for draftFormId to avoid re-triggering the effect on ID change
   const draftFormIdRef = useRef<string | null>(draftFormId);
   useEffect(() => { draftFormIdRef.current = draftFormId; }, [draftFormId]);
+
+  // Stable ref for recordDraftSave (stable function reference from Zustand)
+  const recordDraftSaveRef = useRef(recordDraftSave);
+  useEffect(() => { recordDraftSaveRef.current = recordDraftSave; }, [recordDraftSave]);
 
   // Skip first render
   const isInitialMount = useRef(true);
@@ -96,6 +102,8 @@ export function useAutosave(): void {
         });
 
         if (response.ok) {
+          // Keep session store in sync with the latest title
+          recordDraftSaveRef.current(formId, currentTitle || 'Untitled Form');
           setAutosaveStatus('saved');
         } else if (response.status === 401) {
           // Session expired — still saved locally

@@ -19,6 +19,7 @@
  */
 
 import { useFormBuilderStore } from '../../../stores/form-builder-store';
+import { useDraftSessionStore } from '../../../stores/draft-session-store';
 import { toast } from '../../ui/Toast';
 
 export function usePublish() {
@@ -28,6 +29,8 @@ export function usePublish() {
   const setPublishStatus = useFormBuilderStore((s) => s.setPublishStatus);
   const setDraftFormId = useFormBuilderStore((s) => s.setDraftFormId);
   const setAutosaveStatus = useFormBuilderStore((s) => s.setAutosaveStatus);
+  const recordDraftSave = useDraftSessionStore((s) => s.recordDraftSave);
+  const clearDraftSession = useDraftSessionStore((s) => s.clearDraftSession);
 
   async function publish() {
     // ── Validate ────────────────────────────────────────────────────────
@@ -60,6 +63,8 @@ export function usePublish() {
         if (saveRes.ok && saveRes.formId) {
           formId = saveRes.formId;
           setDraftFormId(formId);
+          // Persist new draft ID for cross-session recovery
+          recordDraftSave(formId, title || 'Untitled Form');
           // Update URL so refresh restores the draft context
           try {
             const url = new URL(window.location.href);
@@ -116,6 +121,8 @@ export function usePublish() {
       const publicUrl = data?.data?.publicUrl ?? `${window.location.origin}/f/${data?.data?.slug}`;
 
       setPublishStatus('published');
+      // Clear the persisted draft session — form is now published
+      clearDraftSession();
       toast.success('Form published!', {
         description: `Your form is live at: ${publicUrl}`,
         action: publicUrl
