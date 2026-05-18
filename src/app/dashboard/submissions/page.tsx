@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
+import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { Inbox, ChevronLeft, ChevronRight } from 'lucide-react';
 import { auth } from '@/lib/auth';
@@ -239,7 +240,15 @@ export default async function SubmissionsPage({ searchParams }: SubmissionsPageP
 
       <div className="flex-1 overflow-auto p-6 space-y-4">
         {/* Filters bar */}
-        <SubmissionFilters activeStatuses={activeStatuses} sort="newest" />
+        <Suspense fallback={
+          <div className="flex gap-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-8 w-24 rounded-full bg-muted animate-pulse" />
+            ))}
+          </div>
+        }>
+          <SubmissionFilters activeStatuses={activeStatuses} sort="newest" />
+        </Suspense>
 
         {/* Table or empty state */}
         {total === 0 && activeStatuses.length === 0 ? (

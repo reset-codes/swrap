@@ -8,8 +8,16 @@ const nextConfig: NextConfig = {
   // If you need Docker deployment (apps/web/Dockerfile), uncomment:
   // output: 'standalone',
 
-  // Exclude firebase-admin from webpack bundling (Node.js-only, not Edge-compatible)
-  serverExternalPackages: ['firebase-admin'],
+  // Exclude Node.js-only packages from webpack bundling.
+  // These packages use native Node.js APIs and are not compatible with
+  // the Edge runtime or browser environments.
+  serverExternalPackages: [
+    'firebase-admin',
+    '@prisma/client',
+    'prisma',
+    '@node-rs/argon2',
+    '@node-rs/bcrypt',
+  ],
 
   // Image optimization configuration
   images: {
