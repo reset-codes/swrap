@@ -20,8 +20,9 @@ function isPocBypassEnabled(): boolean {
 const authMiddleware = auth((req: NextAuthRequest) => {
   const { pathname } = req.nextUrl;
   const isDashboardRoute = pathname.startsWith('/dashboard');
+  const isNewFormRoute = pathname === '/dashboard/forms/new';
 
-  if (isDashboardRoute && !req.auth) {
+  if (isDashboardRoute && !isNewFormRoute && !req.auth) {
     const loginUrl = new URL('/login', req.url);
     loginUrl.searchParams.set('callbackUrl', pathname);
     return NextResponse.redirect(loginUrl);

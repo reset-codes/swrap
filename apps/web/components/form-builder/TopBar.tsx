@@ -46,6 +46,8 @@ export interface TopBarProps {
   formBlobId?: string;
   /** The database form ID used to construct the edit/preview URL */
   draftFormId?: string;
+  /** Whether the user is unauthenticated (guest flow). */
+  isGuest?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -54,9 +56,19 @@ export interface TopBarProps {
 
 interface AutosaveBadgeProps {
   status: AutosaveStatus;
+  isGuest?: boolean;
 }
 
-function AutosaveBadge({ status }: AutosaveBadgeProps) {
+function AutosaveBadge({ status, isGuest }: AutosaveBadgeProps) {
+  if (isGuest) {
+    return (
+      <div className="flex items-center gap-2 rounded-full bg-amber-50 dark:bg-amber-900/20 px-3 py-1 border border-amber-200 dark:border-amber-800">
+        <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+        <span className="text-token-xs font-medium text-amber-700 dark:text-amber-400">Guest Mode · Progress saved locally</span>
+      </div>
+    );
+  }
+
   // idle → render nothing (hidden per spec)
   if (status === 'idle') {
     return <div className="w-40" aria-hidden="true" />;
@@ -128,6 +140,7 @@ export function TopBar({
   publishLoading = false,
   formBlobId,
   draftFormId,
+  isGuest = false,
 }: TopBarProps) {
   // autosaveStatus — prefer externally-controlled value (from store)
   const [localAutosaveStatus] = React.useState<AutosaveStatus>('idle');
@@ -138,6 +151,12 @@ export function TopBar({
   }
 
   function handlePreview() {
+    if (isGuest) {
+      toast.info('Sign in to preview', {
+        description: 'You need an account to preview forms.',
+      });
+      return;
+    }
     // For Walrus-published forms: open the POC preview
     if (formBlobId) {
       window.open(`/poc/forms/${formBlobId}`, '_blank', 'noopener,noreferrer');
@@ -150,26 +169,28 @@ export function TopBar({
     }
     // Neither saved yet — trigger save first, then user can retry
     onSaveDraft?.();
-    // Use toast if available; fallback to console
-    if (typeof window !== 'undefined') {
-      // Temporary feedback until toast is available
-      const el = document.querySelector('[role="status"]');
-      if (!el) console.info('[TopBar] Save your draft first to enable preview.');
-    }
   }
 
   function handleSaveDraft() {
+    if (isGuest) {
+      window.location.href = `/login?callbackUrl=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+      return;
+    }
     onSaveDraft?.();
   }
 
   function handlePublish() {
+    if (isGuest) {
+      window.location.href = `/login?callbackUrl=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+      return;
+    }
     onPublish?.();
   }
 
   function handleBack() {
     // Navigate to forms list — we are always nested under /dashboard/forms
     if (typeof window !== 'undefined') {
-      window.location.href = '/dashboard/forms';
+      window.location.href = isGuest ? '/' : '/dashboard/forms';
     }
   }
 
@@ -184,7 +205,7 @@ export function TopBar({
         <button
           type="button"
           onClick={handleBack}
-          aria-label="Go back"
+          aria-label={isGuest ? "Back to landing" : "Go back"}
           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-text-tertiary transition-colors duration-fast hover:bg-bg-muted hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
@@ -214,45 +235,58 @@ export function TopBar({
 
       {/* ── Center: autosave status ────────────────────────────────── */}
       <div className="flex shrink-0 items-center justify-center px-6">
-        <AutosaveBadge status={autosaveStatus} />
+        <AutosaveBadge status={autosaveStatus} isGuest={isGuest} />
       </div>
 
       {/* ── Right: actions ─────────────────────────────────────────── */}
       <div className="flex shrink-0 items-center gap-2">
-        {/* Theme selector — full Radix Popover implementation (Task 18) */}
-        <ThemeSelector />
+        {isGuest ? (
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={handleSaveDraft}
+            className="bg-amber-600 hover:bg-amber-700 text-white border-none"
+          >
+            Sign in to Save
+          </Button>
+        ) : (
+          <>
+            {/* Theme selector — full Radix Popover implementation (Task 18) */}
+            <ThemeSelector />
 
-        {/* Preview — opens in new tab */}
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handlePreview}
-          aria-label="Preview form in new tab"
-        >
-          Preview
-        </Button>
+            {/* Preview — opens in new tab */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handlePreview}
+              aria-label="Preview form in new tab"
+            >
+              Preview
+            </Button>
 
-        {/* Save Draft — ghost outline */}
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={handleSaveDraft}
-          aria-label="Save draft"
-        >
-          Save Draft
-        </Button>
+            {/* Save Draft — ghost outline */}
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleSaveDraft}
+              aria-label="Save draft"
+            >
+              Save Draft
+            </Button>
 
-        {/* Publish — solid primary */}
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={handlePublish}
-          loading={publishLoading}
-          disabled={publishLoading}
-          aria-label={publishLoading ? 'Publishing…' : 'Publish form'}
-        >
-          Publish
-        </Button>
+            {/* Publish — solid primary */}
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handlePublish}
+              loading={publishLoading}
+              disabled={publishLoading}
+              aria-label={publishLoading ? 'Publishing…' : 'Publish form'}
+            >
+              Publish
+            </Button>
+          </>
+        )}
       </div>
     </header>
   );

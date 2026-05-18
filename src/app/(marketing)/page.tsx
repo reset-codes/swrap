@@ -167,15 +167,15 @@ function ImportInput({ size = 'lg', autoFocus = false }: { size?: 'sm' | 'lg'; a
 
       const data = await res.json() as {
         success?: boolean;
-        data?: { redirectUrl?: string; title?: string; fieldCount?: number };
+        data?: {
+          redirectUrl?: string;
+          title?: string;
+          fieldCount?: number;
+          isGuest?: boolean;
+          fields?: any[];
+        };
         error?: { code?: string; message?: string };
       };
-
-      if (res.status === 401) {
-        sessionStorage.setItem('swrap-pending-import-url', trimmed);
-        router.push('/login?reason=import');
-        return;
-      }
 
       if (!res.ok || !data.success) {
         setErrorMsg(data?.error?.message ?? 'Could not import this Airtable form yet.');
@@ -183,9 +183,18 @@ function ImportInput({ size = 'lg', autoFocus = false }: { size?: 'sm' | 'lg'; a
         return;
       }
 
+      // Guest flow: save fields to localStorage so builder can pick them up
+      if (data.data?.isGuest && data.data.fields) {
+        localStorage.setItem('swrap-builder-draft@1', JSON.stringify({
+          title: data.data.title || 'Imported Form',
+          fields: data.data.fields,
+          savedAt: new Date().toISOString(),
+        }));
+      }
+
       setImportedTitle(data.data?.title ?? 'Imported Form');
       setStatus('success');
-      setTimeout(() => router.push(data.data?.redirectUrl ?? '/dashboard/forms'), 900);
+      setTimeout(() => router.push(data.data?.redirectUrl ?? '/dashboard/forms/new'), 900);
     } catch {
       clearInterval(phaseTimer);
       setErrorMsg('Could not reach the server. Check your connection and try again.');

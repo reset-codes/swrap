@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * /dashboard/forms/new — Canvas Form Builder
  *
@@ -9,27 +7,25 @@
  *
  * With no query param: shows the template picker for a new form.
  * With ?draft=:id: loads the draft fields from the DB and hydrates the builder.
+ *
+ * Requirements: R17, Guest Import Flow
  */
 
-import { useSearchParams } from 'next/navigation';
-import { Suspense } from 'react';
+import { auth } from '@/lib/auth';
 import { CanvasBuilderPage } from '@poc/apps/web/components/form-builder';
 
-function NewFormPageContent() {
-  const searchParams = useSearchParams();
-  const draftId = searchParams.get('draft');
+export default async function NewFormPage(props: {
+  searchParams: Promise<{ draft?: string }>;
+}) {
+  const searchParams = await props.searchParams;
+  const session = await auth();
+  const draftId = searchParams.draft;
 
-  if (draftId) {
-    return <CanvasBuilderPage initialDraftFormId={draftId} />;
-  }
-
-  return <CanvasBuilderPage showTemplatePicker />;
-}
-
-export default function NewFormPage() {
   return (
-    <Suspense fallback={null}>
-      <NewFormPageContent />
-    </Suspense>
+    <CanvasBuilderPage
+      initialDraftFormId={draftId}
+      showTemplatePicker={!draftId}
+      isGuest={!session?.user}
+    />
   );
 }

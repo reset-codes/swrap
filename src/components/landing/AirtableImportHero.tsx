@@ -82,17 +82,15 @@ export function AirtableImportHero() {
 
       const data = (await res.json()) as {
         success?: boolean;
-        data?: { redirectUrl?: string; title?: string; fieldCount?: number };
+        data?: {
+          redirectUrl?: string;
+          title?: string;
+          fieldCount?: number;
+          isGuest?: boolean;
+          fields?: any[];
+        };
         error?: { code?: string; message?: string };
       };
-
-      if (res.status === 401) {
-        // Not signed in — send to login with return URL
-        // Store the import URL in sessionStorage so after login we can re-import
-        sessionStorage.setItem('swrap-pending-import-url', trimmed);
-        router.push('/login?reason=import');
-        return;
-      }
 
       if (!res.ok || !data.success) {
         setErrorMsg(
@@ -102,7 +100,16 @@ export function AirtableImportHero() {
         return;
       }
 
-      const redirectUrl = data.data?.redirectUrl;
+      // Guest flow: save fields to localStorage so builder can pick them up
+      if (data.data?.isGuest && data.data.fields) {
+        localStorage.setItem('swrap-builder-draft@1', JSON.stringify({
+          title: data.data.title || 'Imported Form',
+          fields: data.data.fields,
+          savedAt: new Date().toISOString(),
+        }));
+      }
+
+      const redirectUrl = data.data?.redirectUrl ?? '/dashboard/forms/new';
       const title = data.data?.title ?? 'Imported Form';
 
       setImportedTitle(title);
@@ -110,7 +117,7 @@ export function AirtableImportHero() {
 
       // Brief success flash then navigate
       setTimeout(() => {
-        router.push(redirectUrl ?? '/dashboard/forms');
+        router.push(redirectUrl);
       }, 900);
     } catch {
       setErrorMsg('Could not reach the server. Check your connection and try again.');

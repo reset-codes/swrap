@@ -59,6 +59,8 @@ interface CanvasBuilderPageProps {
   initialDraftFormId?: string;
   /** When true, show the template picker on first mount (used from New Form route). */
   showTemplatePicker?: boolean;
+  /** Whether the user is unauthenticated (guest flow). */
+  isGuest?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -69,6 +71,7 @@ export function CanvasBuilderPage({
   formBlobId: _formBlobId,
   initialDraftFormId,
   showTemplatePicker = false,
+  isGuest = false,
 }: CanvasBuilderPageProps) {
   // ── Zustand store selectors ─────────────────────────────────────────────
   const fields = useFormBuilderStore((s) => s.fields);
@@ -366,6 +369,7 @@ export function CanvasBuilderPage({
         publishLoading={publishStatus === 'publishing'}
         formBlobId={_formBlobId}
         draftFormId={draftFormId ?? undefined}
+        isGuest={isGuest}
       />
 
       {/* Three-panel DnD context */}

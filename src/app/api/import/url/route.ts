@@ -38,15 +38,6 @@ const BodySchema = z.object({
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
 export async function POST(request: Request) {
-  // ── Auth ───────────────────────────────────────────────────────────────────
-  const session = await auth()
-  if (!session?.user?.id) {
-    return NextResponse.json(
-      apiError('UNAUTHORIZED', 'Sign in to import forms.'),
-      { status: 401 },
-    )
-  }
-
   // ── Parse input ────────────────────────────────────────────────────────────
   let body: unknown
   try {
@@ -89,10 +80,6 @@ export async function POST(request: Request) {
   }
 
   // ── Build canvas-native PocFields for draftSchema ──────────────────────────
-  // IMPORTANT: store canvas types (text, select, textarea, etc.) NOT API types
-  // (short_text, dropdown, long_text). The builder reads draftSchema directly
-  // and needs canvas types to render correctly with fieldRegistry.ts.
-  // Type conversion to API types happens at publish time (usePublish → updateDraftInApi).
   const canvasFields = scraped.fields.map((f, index) => ({
     id: f.id,
     type: f.type,          // canvas type: 'text', 'select', 'textarea', etc.
@@ -104,21 +91,15 @@ export async function POST(request: Request) {
     ...(f.helpText     ? { helpText: f.helpText }     : {}),
     ...(f.options && f.options.length > 0
       ? {
-          // PocField.options is string[] — store just the labels
           options: f.options,
         }
       : {}),
     ...(f.validation ? { validation: f.validation } : {}),
   }))
 
-  // ── Create draft directly in DB, preserving canvas types in draftSchema ────
   const formId   = crypto.randomUUID()
   const now      = new Date().toISOString()
   let   slug     = generateSlug(scraped.title || 'imported-form')
-
-  // Ensure slug uniqueness
-  const slugExists = await prisma.form.findUnique({ where: { slug } })
-  if (slugExists) slug = `${slug}-${Math.random().toString(36).slice(2, 6)}`
 
   const draftSchema = {
     id:              formId,
@@ -132,6 +113,29 @@ export async function POST(request: Request) {
     createdAt:       now,
     updatedAt:       now,
   }
+
+  // ── Auth Check for Persistence ─────────────────────────────────────────────
+  const session = await auth()
+
+  if (!session?.user?.id) {
+    // GUEST FLOW: Return the scraped data directly.
+    // The frontend will save this to localStorage and navigate to the builder.
+    return NextResponse.json(
+      apiSuccess({
+        isGuest: true,
+        title: scraped.title,
+        fields: canvasFields,
+        fieldCount: canvasFields.length,
+        skipped: scraped.skipped,
+        redirectUrl: '/dashboard/forms/new', // Frontend will handle loading the data
+      }),
+    )
+  }
+
+  // ── AUTHENTICATED FLOW: Create draft in DB ────────────────────────────────
+  // Ensure slug uniqueness
+  const slugExists = await prisma.form.findUnique({ where: { slug } })
+  if (slugExists) slug = `${slug}-${Math.random().toString(36).slice(2, 6)}`
 
   let form: { id: string; title: string }
   try {
