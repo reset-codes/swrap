@@ -19,6 +19,7 @@ import * as React from 'react';
 import { ArrowLeft, Check } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { ThemeSelector } from './ThemeSelector';
+import { toast } from '../ui/Toast';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -157,18 +158,10 @@ export function TopBar({
       });
       return;
     }
-    // For Walrus-published forms: open the POC preview
-    if (formBlobId) {
-      window.open(`/poc/forms/${formBlobId}`, '_blank', 'noopener,noreferrer');
-      return;
-    }
-    // For DB-saved drafts: open the dashboard edit page (best available preview)
-    if (draftFormId) {
-      window.open(`/dashboard/forms/${draftFormId}`, '_blank', 'noopener,noreferrer');
-      return;
-    }
-    // Neither saved yet — trigger save first, then user can retry
-    onSaveDraft?.();
+
+    toast.info('Preview temporarily unavailable', {
+      description: 'The draft renderer is being upgraded. Please publish to view your form.',
+    });
   }
 
   function handleSaveDraft() {
