@@ -96,13 +96,28 @@ export async function writeWithCreditCheck(
   try {
     const result = await executeWalrusWrite(data, contentType)
     blobId = result.blobId
-  } catch {
-    // Do NOT deduct credits — the write failed.
-    throw new ServiceError(
-      'Failed to store data on Walrus. Please try again.',
-      'WALRUS_WRITE_FAILED',
-      503,
-    )
+  } catch (walrusErr) {
+    // In development with DEV_BYPASS_STORAGE or NODE_ENV=development,
+    // generate a placeholder blob ID so operations can proceed even when
+    // Walrus testnet is unreachable. Matches the pattern in FormService.publishForm.
+    const isDev =
+      process.env.DEV_BYPASS_STORAGE === 'true' ||
+      process.env.NODE_ENV === 'development'
+    if (isDev) {
+      const { createHash } = await import('node:crypto')
+      blobId = `dev-blob-${createHash('sha256').update(data).digest('hex').slice(0, 16)}`
+      console.warn(
+        `[StorageService] Walrus write failed in dev mode, using placeholder blob ID: ${blobId}`,
+        walrusErr instanceof Error ? walrusErr.message : String(walrusErr),
+      )
+    } else {
+      // Do NOT deduct credits — the write failed.
+      throw new ServiceError(
+        'Failed to store data on Walrus. Please try again.',
+        'WALRUS_WRITE_FAILED',
+        503,
+      )
+    }
   }
 
   // ── Step 4: Create BlobReference in PostgreSQL ────────────────────────────
