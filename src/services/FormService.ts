@@ -32,6 +32,35 @@ async function readBlobAsJson<T>(blobId: string): Promise<T> {
   return JSON.parse(buffer.toString('utf-8')) as T
 }
 
+// ---------------------------------------------------------------------------
+// Canvas type → API FieldType normalizer (used at publish time as safety net)
+// ---------------------------------------------------------------------------
+
+const CANVAS_TO_API_TYPE: Record<string, string> = {
+  text:          'short_text',
+  textarea:      'long_text',
+  number:        'short_text',
+  email:         'short_text',
+  phone:         'short_text',
+  select:        'dropdown',
+  // already-API types pass through
+  short_text:    'short_text',
+  long_text:     'long_text',
+  rich_text:     'rich_text',
+  dropdown:      'dropdown',
+  multi_select:  'multi_select',
+  checkbox:      'checkbox',
+  star_rating:   'star_rating',
+  url:           'url',
+  image_upload:  'image_upload',
+  video_upload:  'video_upload',
+  file_upload:   'file_upload',
+}
+
+function normalizeFieldType(type: string): string {
+  return CANVAS_TO_API_TYPE[type] ?? 'short_text'
+}
+
 // ─── ServiceError ─────────────────────────────────────────────────────────────
 
 /**
@@ -665,31 +694,86 @@ export async function publishForm(
       title: form.title,
       description: form.description ?? undefined,
       updatedAt: new Date().toISOString(),
+      // Normalize canvas field types → API FieldType at publish time.
+      // This is a safety net: after import, fields may have canvas types
+      // (text, select, textarea) if the user publishes without saving first.
+      // After a builder save, types are already API-normalized.
+      fields: draftSchema.fields.map((f, index) => ({
+        ...f,
+        id: f.id || crypto.randomUUID(),
+        order: f.order ?? index,
+        type: normalizeFieldType(f.type),
+        // options stored as string[] (canvas) → convert to FieldOption[] for Walrus schema
+        options: Array.isArray(f.options) && f.options.length > 0
+          ? f.options.map((opt: unknown, i: number) => {
+              if (typeof opt === 'string') {
+                return { id: `opt-${index}-${i}`, label: opt, value: opt.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') }
+              }
+              return opt as { id: string; label: string; value: string }
+            })
+          : undefined,
+      })),
     }
 
     const jsonString = JSON.stringify(schemaToPublish)
 
-    // Write to Walrus — infra wallet sponsors the write
+    // Write to Walrus — infra wallet sponsors the write.
+    // Fallback chain:
+    //   1. HTTP publisher via executeWalrusWrite (primary path)
+    //   2. Walrus CLI on the server (WALRUS_CLI_PATH must be set)
+    //   3. Dev-mode placeholder (DEV_BYPASS_STORAGE=true or NOT_CONFIGURED in dev)
+    const schemaBuffer = Buffer.from(jsonString, 'utf-8')
+
+    let walrusWriteOk = false
+
+    // ── Primary: HTTP publisher ───────────────────────────────────────────
     try {
-      const result = await executeWalrusWrite(
-        Buffer.from(jsonString, 'utf-8'),
-        'application/json',
-      )
+      const result = await executeWalrusWrite(schemaBuffer, 'application/json')
       blobId = result.blobId
-    } catch (walrusErr) {
-      // In dev/testnet with DEV_BYPASS_STORAGE, use a deterministic placeholder
-      if (process.env.DEV_BYPASS_STORAGE === 'true') {
+      walrusWriteOk = true
+    } catch (primaryErr) {
+      console.warn(
+        '[FormService.publishForm] Primary Walrus HTTP publisher failed:',
+        primaryErr instanceof Error ? primaryErr.message : primaryErr,
+      )
+    }
+
+    // ── Fallback: CLI publisher (only if HTTP path failed) ────────────────
+    if (!walrusWriteOk) {
+      const cliPath = process.env.WALRUS_CLI_PATH
+      if (cliPath || process.env.NODE_ENV !== 'development') {
+        try {
+          const { publishViaWalrusCli } = await import('@/lib/walrus/cli-publisher')
+          const cliResult = await publishViaWalrusCli(schemaBuffer, 'application/json')
+          blobId = cliResult.blobId
+          walrusWriteOk = true
+          console.info('[FormService.publishForm] CLI fallback succeeded, blobId:', blobId)
+        } catch (cliErr) {
+          console.warn(
+            '[FormService.publishForm] CLI fallback failed:',
+            cliErr instanceof Error ? cliErr.message : cliErr,
+          )
+        }
+      }
+    }
+
+    // ── Dev bypass (never in production) ─────────────────────────────────
+    if (!walrusWriteOk) {
+      const isDev = process.env.DEV_BYPASS_STORAGE === 'true' || process.env.NODE_ENV === 'development'
+      if (isDev) {
         const { createHash } = await import('node:crypto')
         blobId = `dev-blob-${createHash('sha256').update(jsonString).digest('hex').slice(0, 16)}`
-        console.warn('[FormService.publishForm] Walrus write bypassed (DEV_BYPASS_STORAGE=true), blobId:', blobId)
-      } else {
-        console.error('[FormService.publishForm] Walrus write failed:', walrusErr instanceof Error ? walrusErr.message : walrusErr)
-        throw new ServiceError(
-          'Failed to store form on Walrus. Please try again.',
-          'WALRUS_WRITE_FAILED',
-          503,
-        )
+        walrusWriteOk = true
+        console.warn('[FormService.publishForm] Walrus write bypassed (dev mode), blobId:', blobId)
       }
+    }
+
+    if (!walrusWriteOk) {
+      throw new ServiceError(
+        'Failed to store form on Walrus. Please try again.',
+        'WALRUS_WRITE_FAILED',
+        503,
+      )
     }
 
     // Create BlobReference for the new blob

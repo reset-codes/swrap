@@ -20,7 +20,23 @@ const { Client } = require('pg');
 const MIGRATIONS = [
   {
     name: 'add_draftSchema_to_forms',
-    sql: `ALTER TABLE forms ADD COLUMN IF NOT EXISTS "draftSchema" jsonb;`,
+    // Only runs if the forms table already exists (Prisma managed it).
+    // Safe to re-run — IF NOT EXISTS prevents duplicate column error.
+    sql: `
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT FROM information_schema.tables
+          WHERE table_schema = 'public' AND table_name = 'forms'
+        ) THEN
+          ALTER TABLE forms ADD COLUMN IF NOT EXISTS "draftSchema" jsonb;
+          RAISE NOTICE 'draftSchema column ensured on forms table.';
+        ELSE
+          RAISE NOTICE 'forms table does not exist yet — skipping draftSchema migration.';
+        END IF;
+      END
+      $$;
+    `,
   },
 ];
 

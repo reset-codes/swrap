@@ -60,6 +60,14 @@ export function usePublish() {
         if (saveRes.ok && saveRes.formId) {
           formId = saveRes.formId;
           setDraftFormId(formId);
+          // Update URL so refresh restores the draft context
+          try {
+            const url = new URL(window.location.href);
+            url.searchParams.set('draft', formId);
+            window.history.replaceState(null, '', url.toString());
+          } catch {
+            // non-fatal
+          }
           setAutosaveStatus('saved');
         } else {
           setAutosaveStatus('error');

@@ -540,3 +540,49 @@ export async function walrusBlobExists(
 
   throw new WalrusGetError(blobId, maxAttempts, lastError);
 }
+
+/**
+ * Upload `bytes` to Walrus with an automatic CLI fallback.
+ *
+ * Attempts the standard HTTP `walrusPut` first. If it fails after all retries,
+ * falls back to the `walrus` CLI binary (requires WALRUS_CLI_PATH or `walrus`
+ * in PATH on the VPS).
+ *
+ * NEVER silently swallows failures — if both paths fail, the error from the
+ * HTTP path is re-thrown (CLI error is logged as a warning).
+ *
+ * @param bytes       Raw bytes to upload.
+ * @param maxAttempts Maximum attempts for the HTTP path (default: 5).
+ * @returns `{ blobId, sizeBytes }` on success from either path.
+ * @throws `WalrusPutError` if both the HTTP and CLI paths fail.
+ */
+export async function walrusPutWithCliFallback(
+  bytes: Uint8Array,
+  maxAttempts: number = DEFAULT_MAX_ATTEMPTS,
+): Promise<{ blobId: string; sizeBytes: number }> {
+  // ── Primary: HTTP publisher ──────────────────────────────────────────────
+  try {
+    return await walrusPut(bytes, maxAttempts);
+  } catch (httpErr) {
+    console.warn(
+      '[WalrusService] HTTP publisher failed — attempting CLI fallback:',
+      httpErr instanceof Error ? httpErr.message : String(httpErr),
+    );
+  }
+
+  // ── Fallback: CLI publisher ──────────────────────────────────────────────
+  try {
+    const { publishViaWalrusCli } = await import('./walrus-cli-publisher');
+    const result = await publishViaWalrusCli(Buffer.from(bytes));
+    console.info('[WalrusService] CLI fallback succeeded, blobId:', result.blobId);
+    return { blobId: result.blobId, sizeBytes: bytes.length };
+  } catch (cliErr) {
+    console.warn(
+      '[WalrusService] CLI fallback also failed:',
+      cliErr instanceof Error ? cliErr.message : String(cliErr),
+    );
+  }
+
+  // Both paths failed — throw the HTTP error
+  throw new WalrusPutError(undefined, maxAttempts, new Error('HTTP and CLI publish both failed'));
+}

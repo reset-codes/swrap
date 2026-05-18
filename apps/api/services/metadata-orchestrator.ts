@@ -39,6 +39,7 @@ import {
 } from './infrastructure-wallet';
 import {
   walrusPut,
+  walrusPutWithCliFallback,
   walrusBlobExists,
   WalrusPutError,
   WalrusGetError,
@@ -521,7 +522,7 @@ export async function orchestrateFormCreate(
       // Step 4: Upload ciphertext to Walrus
       let putResult: { blobId: string; sizeBytes: number };
       try {
-        putResult = await walrusPut(encryptResult.ciphertext);
+        putResult = await walrusPutWithCliFallback(encryptResult.ciphertext);
       } catch (putErr) {
         transitionJob(jobId, 'failed', db, `Walrus PUT failed: ${putErr instanceof Error ? putErr.message : String(putErr)}`);
         await tryWriteAudit({
@@ -552,7 +553,7 @@ export async function orchestrateFormCreate(
       // Step 4: Upload plaintext bytes to Walrus
       let putResult: { blobId: string; sizeBytes: number };
       try {
-        putResult = await walrusPut(plaintextBytes);
+        putResult = await walrusPutWithCliFallback(plaintextBytes);
         // Release plaintext reference after upload
         plaintextBytes = new Uint8Array(0);
       } catch (putErr) {
@@ -846,7 +847,7 @@ export async function orchestrateSubmissionCreate(
       // Step 5: Upload ciphertext to Walrus
       let putResult: { blobId: string; sizeBytes: number };
       try {
-        putResult = await walrusPut(encryptResult.ciphertext);
+        putResult = await walrusPutWithCliFallback(encryptResult.ciphertext);
       } catch (putErr) {
         transitionJob(jobId, 'failed', db, `Walrus PUT failed: ${putErr instanceof Error ? putErr.message : String(putErr)}`);
         await tryWriteAudit({
@@ -877,7 +878,7 @@ export async function orchestrateSubmissionCreate(
       // Step 5: Upload plaintext bytes to Walrus
       let putResult: { blobId: string; sizeBytes: number };
       try {
-        putResult = await walrusPut(plaintextBytes);
+        putResult = await walrusPutWithCliFallback(plaintextBytes);
         // Release plaintext reference after upload
         plaintextBytes = new Uint8Array(0);
       } catch (putErr) {
@@ -1112,7 +1113,7 @@ export async function orchestrateFileCreate(
     // Step 5: Upload file bytes to Walrus
     let putResult: { blobId: string; sizeBytes: number };
     try {
-      putResult = await walrusPut(req.fileBytes);
+      putResult = await walrusPutWithCliFallback(req.fileBytes);
     } catch (putErr) {
       transitionJob(jobId, 'failed', db, `Walrus PUT failed: ${putErr instanceof Error ? putErr.message : String(putErr)}`);
       await tryWriteAudit({

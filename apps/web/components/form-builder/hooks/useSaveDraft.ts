@@ -157,7 +157,17 @@ export function useSaveDraft() {
       if (response.ok) {
         const data = await response.json() as { data?: { id?: string } };
         if (!draftFormId && data?.data?.id) {
-          setDraftFormId(data.data.id);
+          const newId = data.data.id;
+          setDraftFormId(newId);
+          // Update the browser URL to include ?draft=:id so page refresh
+          // restores the correct draft context (no navigation, no flicker).
+          try {
+            const url = new URL(window.location.href);
+            url.searchParams.set('draft', newId);
+            window.history.replaceState(null, '', url.toString());
+          } catch {
+            // URL update is best-effort — non-fatal
+          }
         }
         setAutosaveStatus('saved');
         toast.success('Draft saved', { description: 'Your form has been saved.' });
