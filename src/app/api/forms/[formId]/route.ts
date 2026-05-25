@@ -30,6 +30,10 @@ import type { FieldConfig } from '@/types/form'
 const UpdateFormBodySchema = z.object({
   title: z.string().min(1, 'Title must not be empty').optional(),
   description: z.string().optional(),
+  slug: z
+    .string()
+    .regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric with hyphens')
+    .optional(),
   mode: FormModeSchema.optional(),
   encryptionMode: EncryptionModeSchema.optional(),
   fields: z.array(FieldConfigSchema).optional(),
@@ -42,6 +46,10 @@ const UpdateFormBodySchema = z.object({
 const UpdateDraftBodySchema = z.object({
   title: z.string().optional(),
   description: z.string().optional(),
+  slug: z
+    .string()
+    .regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric with hyphens')
+    .optional(),
   mode: FormModeSchema.optional(),
   encryptionMode: EncryptionModeSchema.optional(),
   fields: z.array(z.record(z.unknown())).optional(),
@@ -126,6 +134,7 @@ export async function PUT(request: Request, { params }: RouteContext) {
       const form = await updateFormDraft(formId, canonicalUserId, {
         title: parsed.data.title,
         description: parsed.data.description,
+        slug: parsed.data.slug,
         mode: parsed.data.mode,
         encryptionMode: parsed.data.encryptionMode,
         fields: parsed.data.fields as FieldConfig[] | undefined,

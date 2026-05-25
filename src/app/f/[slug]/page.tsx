@@ -11,7 +11,7 @@
 
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
-import { getFormBySlug } from '@/services/FormService';
+import { getFormBySlugOrId } from '@/services/FormService';
 import { TableModeForm } from '@/components/forms/public/TableModeForm';
 import { ConversationalModeForm } from '@/components/forms/public/ConversationalModeForm';
 
@@ -20,14 +20,20 @@ export const revalidate = 60;
 
 interface PublicFormPageProps {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<{ preview?: string }>;
 }
 
-export async function generateMetadata({ params }: PublicFormPageProps): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+  searchParams,
+}: PublicFormPageProps): Promise<Metadata> {
   const { slug } = await params;
+  const searchParamsResolved = await searchParams;
+  const isPreview = searchParamsResolved.preview === 'true';
   try {
-    const schema = await getFormBySlug(slug);
+    const schema = await getFormBySlugOrId(slug, isPreview);
     return {
-      title: schema.title,
+      title: `${schema.title}${isPreview ? ' (Preview)' : ''}`,
       description: schema.description ?? `Fill out ${schema.title} on Swrap`,
     };
   } catch {
@@ -35,12 +41,17 @@ export async function generateMetadata({ params }: PublicFormPageProps): Promise
   }
 }
 
-export default async function PublicFormPage({ params }: PublicFormPageProps) {
+export default async function PublicFormPage({
+  params,
+  searchParams,
+}: PublicFormPageProps) {
   const { slug } = await params;
+  const searchParamsResolved = await searchParams;
+  const isPreview = searchParamsResolved.preview === 'true';
 
   let schema;
   try {
-    schema = await getFormBySlug(slug);
+    schema = await getFormBySlugOrId(slug, isPreview);
   } catch {
     notFound();
   }
@@ -49,7 +60,14 @@ export default async function PublicFormPage({ params }: PublicFormPageProps) {
     <div>
       {/* Form title */}
       <div className="mb-6">
-        <h1 className="text-h1 text-text-primary">{schema.title}</h1>
+        <h1 className="text-h1 text-text-primary">
+          {schema.title}
+          {isPreview && (
+            <span className="ml-3 text-xs font-semibold uppercase tracking-wider text-blue-500 bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded border border-blue-200 dark:border-blue-800">
+              Preview Mode
+            </span>
+          )}
+        </h1>
         {schema.description && (
           <p className="mt-2 text-body text-text-secondary">{schema.description}</p>
         )}

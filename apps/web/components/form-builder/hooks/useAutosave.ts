@@ -194,17 +194,21 @@ export function useAutosave(): void {
     };
   }, [fields, title, setAutosaveStatus, setSyncStatus, incrementDraftVersion, doAutosave]);
 
-  // Auto-retry when connection comes back online
+  // ── Auto-retry, Visibility Sync, Silent Queue, & Tab Close Protection ─────
   useEffect(() => {
-    function handleOnline() {
+    function triggerSync() {
       const formId = draftFormIdRef.current;
       const status = useFormBuilderStore.getState().syncStatus;
-      if (formId && status === 'sync-failed') {
-        console.log('[Autosave] Browser online, triggering auto-retry sync...');
+      if (formId && (status === 'sync-failed' || status === 'local-only') && navigator.onLine) {
+        console.log('[Autosave] Background sync triggered...');
         setAutosaveStatus('saving');
         setSyncStatus('syncing');
+        
+        const currentTitle = useFormBuilderStore.getState().title;
+        const currentFields = useFormBuilderStore.getState().fields;
         const currentSequence = ++sequenceRef.current;
-        doAutosave(title, fields, currentSequence).catch(() => {
+        
+        doAutosave(currentTitle, currentFields, currentSequence).catch(() => {
           if (currentSequence === sequenceRef.current) {
             setAutosaveStatus('error');
             setSyncStatus('sync-failed');
@@ -213,9 +217,71 @@ export function useAutosave(): void {
       }
     }
 
+    function handleOnline() {
+      console.log('[Autosave] Browser online, triggering auto-retry sync...');
+      triggerSync();
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === 'visible') {
+        console.log('[Autosave] Tab visible, triggering visibility sync...');
+        triggerSync();
+      }
+    }
+
+    // Silent background retry queue every 8 seconds
+    const retryInterval = setInterval(() => {
+      const status = useFormBuilderStore.getState().syncStatus;
+      if (status === 'sync-failed') {
+        console.log('[Autosave] Silent background retry queue tick...');
+        triggerSync();
+      }
+    }, 8000);
+
     window.addEventListener('online', handleOnline);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
       window.removeEventListener('online', handleOnline);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      clearInterval(retryInterval);
     };
-  }, [fields, title, doAutosave, setAutosaveStatus, setSyncStatus]);
+  }, [doAutosave, setAutosaveStatus, setSyncStatus]);
+
+  // Tab Close Protection (beforeunload) & Emergency LocalStorage Flush
+  useEffect(() => {
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      const status = useFormBuilderStore.getState().syncStatus;
+      if (status !== 'synced') {
+        // Synchronous emergency flush
+        const currentTitle = useFormBuilderStore.getState().title;
+        const currentFields = useFormBuilderStore.getState().fields;
+        const nextVersion = useFormBuilderStore.getState().draftVersion;
+        const formId = draftFormIdRef.current;
+        try {
+          localStorage.setItem(
+            DRAFT_KEY,
+            JSON.stringify({
+              title: currentTitle,
+              fields: currentFields,
+              savedAt: new Date().toISOString(),
+              version: 1,
+              draftVersion: nextVersion,
+              syncStatus: formId ? 'sync-failed' : 'local-only',
+            }),
+          );
+          console.log('[Autosave] Emergency localStorage flush successful');
+        } catch {}
+
+        e.preventDefault();
+        e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+        return e.returnValue;
+      }
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
 }

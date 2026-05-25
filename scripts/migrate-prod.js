@@ -19,23 +19,119 @@ const { Client } = require('pg');
 
 const MIGRATIONS = [
   {
-    name: 'add_draftSchema_to_forms',
-    // Only runs if the forms table already exists (Prisma managed it).
-    // Safe to re-run — IF NOT EXISTS prevents duplicate column error.
+    name: 'create_app_enums',
     sql: `
       DO $$
       BEGIN
-        IF EXISTS (
-          SELECT FROM information_schema.tables
-          WHERE table_schema = 'public' AND table_name = 'forms'
-        ) THEN
-          ALTER TABLE forms ADD COLUMN IF NOT EXISTS "draftSchema" jsonb;
-          RAISE NOTICE 'draftSchema column ensured on forms table.';
-        ELSE
-          RAISE NOTICE 'forms table does not exist yet — skipping draftSchema migration.';
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'UserRole') THEN
+          CREATE TYPE "UserRole" AS ENUM ('owner', 'admin', 'viewer');
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'FormMode') THEN
+          CREATE TYPE "FormMode" AS ENUM ('conversational', 'table');
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'EncryptionMode') THEN
+          CREATE TYPE "EncryptionMode" AS ENUM ('none', 'field_level', 'full_submission');
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'SubmissionStatus') THEN
+          CREATE TYPE "SubmissionStatus" AS ENUM ('open', 'under_review', 'planned', 'resolved', 'rejected');
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'BlobType') THEN
+          CREATE TYPE "BlobType" AS ENUM ('form_schema', 'submission', 'file_upload', 'encrypted_field');
         END IF;
       END
       $$;
+    `,
+  },
+  {
+    name: 'create_app_tables',
+    sql: `
+      -- 1. app_users
+      CREATE TABLE IF NOT EXISTS public.app_users (
+          id text NOT NULL PRIMARY KEY,
+          email text NOT NULL UNIQUE,
+          name text,
+          image text,
+          role "UserRole" NOT NULL DEFAULT 'admin'::"UserRole",
+          "createdAt" timestamp(3) without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" timestamp(3) without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+
+      -- 2. app_forms
+      CREATE TABLE IF NOT EXISTS public.app_forms (
+          id text NOT NULL PRIMARY KEY,
+          slug text NOT NULL UNIQUE,
+          title text NOT NULL,
+          description text,
+          "ownerId" text NOT NULL,
+          "schemaBlobId" text,
+          "draftSchema" jsonb,
+          mode "FormMode" NOT NULL DEFAULT 'table'::"FormMode",
+          "encryptionMode" "EncryptionMode" NOT NULL DEFAULT 'none'::"EncryptionMode",
+          "sealPolicyId" text,
+          "isPublished" boolean NOT NULL DEFAULT false,
+          "publishedAt" timestamp(3) without time zone,
+          "createdAt" timestamp(3) without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" timestamp(3) without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY ("ownerId") REFERENCES app_users(id) ON UPDATE CASCADE ON DELETE CASCADE
+      );
+
+      -- 3. app_submissions
+      CREATE TABLE IF NOT EXISTS public.app_submissions (
+          id text NOT NULL PRIMARY KEY,
+          "formId" text NOT NULL,
+          "walrusBlobId" text NOT NULL UNIQUE,
+          status "SubmissionStatus" NOT NULL DEFAULT 'open'::"SubmissionStatus",
+          "submittedAt" timestamp(3) without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY ("formId") REFERENCES app_forms(id) ON UPDATE CASCADE ON DELETE CASCADE
+      );
+
+      -- 4. app_blob_references
+      CREATE TABLE IF NOT EXISTS public.app_blob_references (
+          id text NOT NULL PRIMARY KEY,
+          "walrusBlobId" text NOT NULL UNIQUE,
+          "blobType" "BlobType" NOT NULL,
+          "sizeBytes" integer,
+          "formId" text,
+          "submissionId" text,
+          "createdAt" timestamp(3) without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY ("formId") REFERENCES app_forms(id) ON UPDATE CASCADE ON DELETE SET NULL,
+          FOREIGN KEY ("submissionId") REFERENCES app_submissions(id) ON UPDATE CASCADE ON DELETE SET NULL
+      );
+
+      -- 5. app_storage_credits
+      CREATE TABLE IF NOT EXISTS public.app_storage_credits (
+          id text NOT NULL PRIMARY KEY,
+          "userId" text NOT NULL UNIQUE,
+          balance double precision NOT NULL DEFAULT 0,
+          "updatedAt" timestamp(3) without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY ("userId") REFERENCES app_users(id) ON UPDATE CASCADE ON DELETE CASCADE
+      );
+
+      -- 6. app_credit_transactions
+      CREATE TABLE IF NOT EXISTS public.app_credit_transactions (
+          id text NOT NULL PRIMARY KEY,
+          "userId" text NOT NULL,
+          "creditId" text NOT NULL,
+          amount double precision NOT NULL,
+          type text NOT NULL,
+          "walrusBlobId" text,
+          description text,
+          "createdAt" timestamp(3) without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY ("creditId") REFERENCES app_storage_credits(id) ON UPDATE CASCADE ON DELETE CASCADE,
+          FOREIGN KEY ("userId") REFERENCES app_users(id) ON UPDATE CASCADE ON DELETE CASCADE
+      );
+
+      -- 7. app_submission_status_logs
+      CREATE TABLE IF NOT EXISTS public.app_submission_status_logs (
+          id text NOT NULL PRIMARY KEY,
+          "submissionId" text NOT NULL,
+          "adminId" text NOT NULL,
+          status "SubmissionStatus" NOT NULL,
+          note text,
+          "createdAt" timestamp(3) without time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY ("adminId") REFERENCES app_users(id) ON UPDATE CASCADE ON DELETE CASCADE,
+          FOREIGN KEY ("submissionId") REFERENCES app_submissions(id) ON UPDATE CASCADE ON DELETE CASCADE
+      );
     `,
   },
 ];

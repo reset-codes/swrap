@@ -105,6 +105,28 @@ export function generateSlug(title: string): string {
   return `${base}-${suffix}`
 }
 
+const ADJECTIVES = [
+  'silent', 'lunar', 'emerald', 'golden', 'vibrant', 'swift', 'calm', 'oceanic',
+  'mystic', 'cosmic', 'solar', 'stellar', 'radiant', 'wild', 'gentle', 'bold',
+  'shadow', 'crimson', 'azure', 'amber', 'frost', 'spark', 'breeze', 'dawn'
+]
+const NOUNS = [
+  'forest', 'wave', 'form', 'peak', 'valley', 'river', 'sky', 'wind',
+  'stone', 'flame', 'canyon', 'meadow', 'dune', 'coast', 'lake', 'garden',
+  'cloud', 'reef', 'path', 'field', 'summit', 'oasis', 'haven', 'glade'
+]
+
+/**
+ * Generate a random, readable, collision-safe slug.
+ * Example: silent-forest-4821, lunar-wave-1938
+ */
+export function generateReadableSlug(): string {
+  const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)]
+  const noun = NOUNS[Math.floor(Math.random() * NOUNS.length)]
+  const num = Math.floor(1000 + Math.random() * 9000) // 4-digit number (1000-9999)
+  return `${adj}-${noun}-${num}`
+}
+
 /**
  * Estimate the WAL storage cost for a JSON payload.
  *
@@ -174,18 +196,31 @@ export async function createFormDraft(
   input: CreateFormInput,
 ): Promise<FormMetadata> {
   // ── Step 1: Resolve slug ──────────────────────────────────────────────────
-  let slug = input.slug ?? generateSlug(input.title || 'untitled-form')
+  let slug = ''
   if (input.slug) {
     slug = input.slug
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '')
-  }
 
-  // Ensure slug uniqueness — append random suffix on collision
-  const existing = await prisma.form.findUnique({ where: { slug } })
-  if (existing) {
-    slug = `${slug}-${Math.random().toString(36).slice(2, 6)}`
+    const existing = await prisma.form.findUnique({ where: { slug } })
+    if (existing) {
+      slug = `${slug}-${Math.random().toString(36).slice(2, 6)}`
+    }
+  } else {
+    let retries = 10
+    let unique = false
+    while (retries > 0 && !unique) {
+      slug = generateReadableSlug()
+      const existing = await prisma.form.findUnique({ where: { slug } })
+      if (!existing) {
+        unique = true
+      }
+      retries--
+    }
+    if (!unique) {
+      slug = `${slug}-${Math.random().toString(36).slice(2, 6)}`
+    }
   }
 
   const formId = crypto.randomUUID()
@@ -241,7 +276,7 @@ export async function createFormDraft(
 export async function updateFormDraft(
   formId: string,
   adminId: string,
-  input: { title?: string; description?: string; mode?: string; encryptionMode?: string; fields?: FieldConfig[] },
+  input: { title?: string; description?: string; slug?: string; mode?: string; encryptionMode?: string; fields?: FieldConfig[] },
 ): Promise<FormMetadata> {
   const existing = await prisma.form.findUnique({ where: { id: formId } })
   if (!existing) {
@@ -249,6 +284,30 @@ export async function updateFormDraft(
   }
   if (existing.ownerId !== adminId) {
     throw new ServiceError('You do not have permission to update this form.', 'FORBIDDEN', 403)
+  }
+
+  // Sanitize and validate slug if provided and changed
+  let updatedSlug = existing.slug
+  if (input.slug !== undefined && input.slug !== existing.slug) {
+    const sanitized = input.slug
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+
+    if (sanitized !== existing.slug) {
+      // Check uniqueness against other forms
+      const slugExists = await prisma.form.findFirst({
+        where: { slug: sanitized, NOT: { id: formId } },
+      })
+      if (slugExists) {
+        throw new ServiceError(
+          `The slug "${sanitized}" is already taken. Please choose a different slug.`,
+          'SLUG_TAKEN',
+          409,
+        )
+      }
+      updatedSlug = sanitized
+    }
   }
 
   const now = new Date().toISOString()
@@ -275,6 +334,7 @@ export async function updateFormDraft(
     ...existingDraft,
     title: input.title ?? existingDraft.title,
     description: input.description !== undefined ? input.description : existingDraft.description,
+    slug: updatedSlug,
     mode: (input.mode as FormSchema['mode']) ?? existingDraft.mode,
     encryptionMode: (input.encryptionMode as FormSchema['encryptionMode']) ?? existingDraft.encryptionMode,
     fields: updatedFields,
@@ -287,6 +347,7 @@ export async function updateFormDraft(
     data: {
       title: input.title ?? existing.title,
       description: input.description !== undefined ? input.description : existing.description,
+      slug: updatedSlug,
       mode: (input.mode as typeof existing.mode) ?? existing.mode,
       encryptionMode: (input.encryptionMode as typeof existing.encryptionMode) ?? existing.encryptionMode,
       draftSchema: updatedDraft as unknown as Prisma.InputJsonValue,
@@ -310,23 +371,35 @@ export async function createForm(
   input: CreateFormInput,
 ): Promise<FormMetadata> {
   // ── Step 1: Resolve slug ──────────────────────────────────────────────────
-  let slug = input.slug ?? generateSlug(input.title)
-
-  // Normalise caller-provided slug to the same format
+  let slug = ''
   if (input.slug) {
     slug = input.slug
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '')
-  }
 
-  const existing = await prisma.form.findUnique({ where: { slug } })
-  if (existing) {
-    throw new ServiceError(
-      `The slug "${slug}" is already taken. Please choose a different slug.`,
-      'SLUG_TAKEN',
-      409,
-    )
+    const existing = await prisma.form.findUnique({ where: { slug } })
+    if (existing) {
+      throw new ServiceError(
+        `The slug "${slug}" is already taken. Please choose a different slug.`,
+        'SLUG_TAKEN',
+        409,
+      )
+    }
+  } else {
+    let retries = 10
+    let unique = false
+    while (retries > 0 && !unique) {
+      slug = generateReadableSlug()
+      const existing = await prisma.form.findUnique({ where: { slug } })
+      if (!existing) {
+        unique = true
+      }
+      retries--
+    }
+    if (!unique) {
+      slug = `${slug}-${Math.random().toString(36).slice(2, 6)}`
+    }
   }
 
   // ── Step 2: Assemble FormSchema ───────────────────────────────────────────
@@ -558,10 +631,41 @@ export async function updateForm(
     }
   }
 
+  // If slug is provided and changing, ensure form is not published
+  let updatedSlug = existing.slug
+  if (input.slug !== undefined && input.slug !== existing.slug) {
+    if (existing.isPublished) {
+      throw new ServiceError(
+        'Published form slugs are immutable and cannot be changed.',
+        'SLUG_IMMUTABLE',
+        400,
+      )
+    }
+    const sanitized = input.slug
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+
+    if (sanitized !== existing.slug) {
+      const slugExists = await prisma.form.findFirst({
+        where: { slug: sanitized, NOT: { id: formId } },
+      })
+      if (slugExists) {
+        throw new ServiceError(
+          `The slug "${sanitized}" is already taken. Please choose a different slug.`,
+          'SLUG_TAKEN',
+          409,
+        )
+      }
+      updatedSlug = sanitized
+    }
+  }
+
   const updatedSchema: FormSchema = {
     ...currentSchema,
     title: input.title ?? currentSchema.title,
     description: input.description ?? currentSchema.description,
+    slug: updatedSlug,
     mode: input.mode ?? currentSchema.mode,
     encryptionMode: newEncryptionMode,
     sealPolicyId,
@@ -614,6 +718,7 @@ export async function updateForm(
     const form = await tx.form.update({
       where: { id: formId },
       data: {
+        slug: updatedSlug,
         title: input.title ?? existing.title,
         description:
           input.description !== undefined
@@ -852,6 +957,65 @@ export async function getFormBySlug(slug: string): Promise<FormSchema> {
     'This form does not have a schema stored on Walrus.',
     'SCHEMA_MISSING',
     500,
+  )
+}
+
+/**
+ * Retrieve a form schema for public filling or previewing.
+ * Supports lookup by slug OR by form ID (draft ID).
+ * If isPreview is true, bypasses the isPublished check and retrieves the draftSchema.
+ */
+export async function getFormBySlugOrId(
+  slugOrId: string,
+  isPreview = false,
+): Promise<FormSchema> {
+  // Try finding by ID first
+  let form = await prisma.form.findUnique({
+    where: { id: slugOrId },
+  })
+
+  // Fallback to finding by slug
+  if (!form) {
+    form = await prisma.form.findUnique({
+      where: { slug: slugOrId },
+    })
+  }
+
+  if (!form) {
+    throw new ServiceError(
+      `No form found for "${slugOrId}".`,
+      'NOT_FOUND',
+      404,
+    )
+  }
+
+  // If not in preview mode, it MUST be published
+  if (!isPreview && !form.isPublished) {
+    throw new ServiceError(
+      `Form "${slugOrId}" is not published.`,
+      'NOT_FOUND',
+      404,
+    )
+  }
+
+  // If there's a published schema and we're NOT in preview mode (or draftSchema is missing), fetch from Walrus
+  if (form.schemaBlobId && (!isPreview || !form.draftSchema)) {
+    try {
+      return await readBlobAsJson<FormSchema>(form.schemaBlobId)
+    } catch (err) {
+      console.warn(`[getFormBySlugOrId] Walrus fetch failed for ${slugOrId}, falling back to draftSchema:`, err)
+    }
+  }
+
+  // Return draftSchema for draft / preview / Walrus fallback
+  if (form.draftSchema) {
+    return form.draftSchema as unknown as FormSchema
+  }
+
+  throw new ServiceError(
+    `Form schema is empty or not yet defined.`,
+    'SCHEMA_MISSING',
+    400,
   )
 }
 

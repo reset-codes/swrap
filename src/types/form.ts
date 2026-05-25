@@ -120,6 +120,7 @@ export interface CreateFormInput {
 export interface UpdateFormInput {
   title?: string;
   description?: string;
+  slug?: string;
   mode?: FormMode;
   encryptionMode?: EncryptionMode;
   fields?: FieldConfig[];

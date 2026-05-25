@@ -41,6 +41,7 @@ export interface FormBuilderSnapshot {
   title: string;
   theme: FormTheme;
   bannerUrl: string | null;
+  slug: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -53,6 +54,7 @@ export interface FormBuilderState {
   title: string;
   theme: FormTheme;
   bannerUrl: string | null;
+  slug: string;
 
   // --- Editor UI state (not snapshotted) ---
   selectedFieldId: string | null;
@@ -76,8 +78,9 @@ export interface FormBuilderState {
   duplicateField(id: string): void;
   reorderFields(sourceIndex: number, destinationIndex: number): void;
 
-  // --- Title / theme / banner mutations (push undo snapshot) ---
+  // --- Title / theme / banner / slug mutations (push undo snapshot) ---
   setTitle(title: string): void;
+  setSlug(slug: string): void;
   setTheme(theme: FormTheme): void;
   setBannerUrl(url: string | null): void;
 
@@ -112,6 +115,7 @@ const INITIAL_STATE: Pick<
   | 'title'
   | 'theme'
   | 'bannerUrl'
+  | 'slug'
   | 'selectedFieldId'
   | 'autosaveStatus'
   | 'syncStatus'
@@ -127,6 +131,7 @@ const INITIAL_STATE: Pick<
   title: '',
   theme: 'minimal',
   bannerUrl: null,
+  slug: '',
   selectedFieldId: null,
   autosaveStatus: 'idle',
   syncStatus: 'local-only',
@@ -148,13 +153,14 @@ const INITIAL_STATE: Pick<
  * Field objects are shallow-cloned to prevent mutation aliasing.
  */
 function takeSnapshot(
-  state: Pick<FormBuilderState, 'fields' | 'title' | 'theme' | 'bannerUrl'>,
+  state: Pick<FormBuilderState, 'fields' | 'title' | 'theme' | 'bannerUrl' | 'slug'>,
 ): FormBuilderSnapshot {
   return {
     fields: state.fields.map((f) => ({ ...f })),
     title: state.title,
     theme: state.theme,
     bannerUrl: state.bannerUrl,
+    slug: state.slug,
   };
 }
 
@@ -168,7 +174,7 @@ function takeSnapshot(
 function pushUndo(
   state: Pick<
     FormBuilderState,
-    'fields' | 'title' | 'theme' | 'bannerUrl' | 'undoStack'
+    'fields' | 'title' | 'theme' | 'bannerUrl' | 'slug' | 'undoStack'
   >,
 ): Pick<FormBuilderState, 'undoStack' | 'redoStack'> {
   const snapshot = takeSnapshot(state);
@@ -267,6 +273,12 @@ export const useFormBuilderStore = create<FormBuilderState>()(
       set({ ...undoRedo, title });
     },
 
+    setSlug(slug: string) {
+      const state = get();
+      const undoRedo = pushUndo(state);
+      set({ ...undoRedo, slug });
+    },
+
     setTheme(theme: FormTheme) {
       const state = get();
       const undoRedo = pushUndo(state);
@@ -334,6 +346,7 @@ export const useFormBuilderStore = create<FormBuilderState>()(
         title: top.title,
         theme: top.theme,
         bannerUrl: top.bannerUrl,
+        slug: top.slug,
         // Update stacks
         undoStack: rest,
         redoStack: [current, ...redoStack],
@@ -357,6 +370,7 @@ export const useFormBuilderStore = create<FormBuilderState>()(
         title: top.title,
         theme: top.theme,
         bannerUrl: top.bannerUrl,
+        slug: top.slug,
         // Update stacks
         undoStack: [current, ...undoStack],
         redoStack: rest,
@@ -386,6 +400,7 @@ export const useFormBuilderStore = create<FormBuilderState>()(
         title: snapshot.title,
         theme: snapshot.theme,
         bannerUrl: snapshot.bannerUrl,
+        slug: snapshot.slug ?? '',
       });
     },
   }),

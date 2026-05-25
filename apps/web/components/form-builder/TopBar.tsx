@@ -59,12 +59,29 @@ export interface TopBarProps {
 
 interface AutosaveBadgeProps {
   status: AutosaveStatus;
-  syncStatus?: 'local-only' | 'syncing' | 'synced' | 'sync-failed';
+  syncStatus?: 'local-only' | 'syncing' | 'synced' | 'sync-failed' | 'preview-preparing';
   isGuest?: boolean;
   onRetry?: () => void;
 }
 
 function AutosaveBadge({ status, syncStatus, isGuest, onRetry }: AutosaveBadgeProps) {
+  if (syncStatus === 'preview-preparing') {
+    return (
+      <div
+        className="flex items-center gap-1.5 text-blue-500"
+        aria-live="polite"
+        aria-label="Preview preparing"
+        role="status"
+      >
+        <span
+          className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-blue-500"
+          aria-hidden="true"
+        />
+        <span className="text-token-sm">Preview preparing...</span>
+      </div>
+    );
+  }
+
   if (isGuest) {
     return (
       <div className="flex items-center gap-2 rounded-full bg-amber-50 dark:bg-amber-900/20 px-3 py-1 border border-amber-200 dark:border-amber-800">
@@ -93,24 +110,41 @@ function AutosaveBadge({ status, syncStatus, isGuest, onRetry }: AutosaveBadgePr
   }
 
   if (syncStatus === 'sync-failed') {
+    const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+    if (isOffline) {
+      return (
+        <div
+          className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400"
+          aria-live="polite"
+          aria-label="Offline"
+          role="status"
+        >
+          <span
+            className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse"
+            aria-hidden="true"
+          />
+          <span className="text-token-sm">Offline</span>
+        </div>
+      );
+    }
     return (
       <div
-        className="flex items-center gap-1.5 text-red-500"
+        className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400"
         aria-live="assertive"
-        aria-label="Save failed"
+        aria-label="Sync failed — retrying"
         role="alert"
       >
         <span
-          className="inline-block h-1.5 w-1.5 rounded-full bg-red-500"
+          className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse"
           aria-hidden="true"
         />
-        <span className="text-token-sm">Save failed — Saved locally</span>
+        <span className="text-token-sm">Sync failed — retrying</span>
         <button
           type="button"
           onClick={onRetry}
           className="ml-1 text-token-xs font-semibold text-blue-500 hover:text-blue-600 underline focus:outline-none"
         >
-          Retry
+          Force Retry
         </button>
       </div>
     );
@@ -146,7 +180,7 @@ function AutosaveBadge({ status, syncStatus, isGuest, onRetry }: AutosaveBadgePr
           aria-hidden="true"
           strokeWidth={2.5}
         />
-        <span className="text-token-sm">Saved</span>
+        <span className="text-token-sm">Synced</span>
       </div>
     );
   }
@@ -234,6 +268,18 @@ export function TopBar({
   const [localAutosaveStatus] = React.useState<AutosaveStatus>('idle');
   const autosaveStatus = externalAutosaveStatus ?? localAutosaveStatus;
   const syncStatus = useFormBuilderStore((s) => s.syncStatus);
+  const [previewPending, setPreviewPending] = React.useState(false);
+
+  React.useEffect(() => {
+    if (previewPending && syncStatus === 'synced' && draftFormId) {
+      setPreviewPending(false);
+      window.open(`/f/${draftFormId}?preview=true`, '_blank');
+      toast.success('Preview ready!', { description: 'Opening preview in a new tab.' });
+    } else if (previewPending && syncStatus === 'sync-failed') {
+      setPreviewPending(false);
+      toast.error('Preview failed', { description: 'Could not sync draft to the server.' });
+    }
+  }, [previewPending, syncStatus, draftFormId]);
 
   function handleTitleChange(e: React.ChangeEvent<HTMLInputElement>) {
     onTitleChange?.(e.target.value);
@@ -247,9 +293,20 @@ export function TopBar({
       return;
     }
 
-    toast.info('Preview temporarily unavailable', {
-      description: 'The draft renderer is being upgraded. Please publish to view your form.',
+    if (syncStatus === 'synced' && draftFormId) {
+      window.open(`/f/${draftFormId}?preview=true`, '_blank');
+      return;
+    }
+
+    // Unsynced changes or first save
+    setPreviewPending(true);
+    toast.info('Preview preparing...', {
+      description: draftFormId 
+        ? 'Syncing your latest changes first.' 
+        : 'Saving your draft form first.',
     });
+    
+    onSaveDraft?.();
   }
 
   function handleSaveDraft() {
@@ -318,7 +375,7 @@ export function TopBar({
       <div className="flex shrink-0 items-center justify-center px-6">
         <AutosaveBadge
           status={autosaveStatus}
-          syncStatus={syncStatus}
+          syncStatus={previewPending ? 'preview-preparing' : syncStatus}
           isGuest={isGuest}
           onRetry={handleSaveDraft}
         />

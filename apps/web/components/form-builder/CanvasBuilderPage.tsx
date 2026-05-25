@@ -47,6 +47,7 @@ import { useUndoRedoKeys } from './hooks/useUndoRedoKeys';
 import { usePublish } from './hooks/usePublish';
 import { useSaveDraft } from './hooks/useSaveDraft';
 import { ErrorBoundary } from '../ui/ErrorBoundary';
+import { toast } from '../ui/Toast';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -93,6 +94,7 @@ export function CanvasBuilderPage({
   const publishStatus = useFormBuilderStore((s) => s.publishStatus);
   const draftFormId = useFormBuilderStore((s) => s.draftFormId);
   const setDraftFormId = useFormBuilderStore((s) => s.setDraftFormId);
+  const setSyncStatus = useFormBuilderStore((s) => s.setSyncStatus);
 
   // ── Draft session store (persisted — survives refresh + browser reopen) ─
   const lastDraftFormId = useDraftSessionStore((s) => s.lastDraftFormId);
@@ -126,6 +128,7 @@ export function CanvasBuilderPage({
     loadDraft({
       fields: freshFields,
       title: template.id !== 'blank' ? template.title : '',
+      slug: '',
       theme: 'minimal',
       bannerUrl: null,
     });
@@ -169,105 +172,126 @@ export function CanvasBuilderPage({
     saveDraft();
   }
 
-  // ── Load draft on first mount ────────────────────────────────────────────
+  // ── Load draft on first mount (Timestamp Reconciled) ─────────────────────
   React.useEffect(() => {
     console.log('[Builder Init] Mount: draftId =', initialDraftFormId, 'isImport =', isImport, 'isGuest =', isGuest);
+
+    function processDraft(form: { title?: string; slug?: string; updatedAt?: string; draftSchema?: { fields?: PocField[]; title?: string; slug?: string; updatedAt?: string } }) {
+      const draft = form.draftSchema;
+      if (!draft) {
+        loadDraft({ fields: [], title: form.title || '', slug: form.slug || '', theme: 'minimal', bannerUrl: null });
+        return;
+      }
+
+      // Extract DB timestamp (favour draftSchema.updatedAt, fallback to form.updatedAt)
+      const dbSavedAt = draft.updatedAt 
+        ? new Date(draft.updatedAt).getTime() 
+        : (form.updatedAt ? new Date(form.updatedAt).getTime() : 0);
+      
+      // Load local draft to compare timestamps
+      let localDraft: { title: string; fields: PocField[]; slug?: string; savedAt?: string; draftVersion?: number } | null = null;
+      try {
+        const raw = localStorage.getItem('swrap-builder-draft@1');
+        if (raw) localDraft = JSON.parse(raw);
+      } catch {}
+      
+      const localSavedAt = localDraft?.savedAt ? new Date(localDraft.savedAt).getTime() : 0;
+
+      // ── Local Draft is Fresher Recovery Flow ──
+      if (localDraft && localSavedAt > dbSavedAt && (localDraft.fields?.length > 0 || localDraft.title)) {
+        console.log('[Builder Init] Local draft is fresher. Restoring local draft and queueing background sync.');
+        loadDraft({
+          fields: localDraft.fields,
+          title: localDraft.title || '',
+          slug: localDraft.slug || '',
+          theme: 'minimal',
+          bannerUrl: null,
+        });
+        setSyncStatus('sync-failed'); // Immediately flags background sync to update DB
+        toast.success('Fresher local changes recovered', {
+          description: 'Saved your offline progress and syncing back to the cloud.',
+        });
+        return;
+      }
+
+      // ── DB Draft is Fresher/Equal Recovery Flow ──
+      console.log('[Builder Init] DB draft is fresher or equal. Restoring DB draft.');
+      const rawFields = draft.fields || [];
+      const normalizedFields: PocField[] = rawFields.map((f, index) => {
+        const rawOptions = f.options;
+        let options: string[] | undefined;
+        if (Array.isArray(rawOptions) && rawOptions.length > 0) {
+          if (typeof rawOptions[0] === 'string') {
+            options = rawOptions as string[];
+          } else {
+            options = (rawOptions as { label?: string }[]).map((o) => o.label ?? '').filter(Boolean);
+          }
+        }
+        return { ...f, id: f.id || crypto.randomUUID(), ...(options !== undefined ? { options } : {}) };
+      });
+
+      loadDraft({
+        fields: normalizedFields,
+        title: draft.title ?? form.title ?? '',
+        slug: form.slug ?? '',
+        theme: 'minimal',
+        bannerUrl: null,
+      });
+
+      // Update localStorage cache to match the fresh DB draft
+      try {
+        localStorage.setItem(
+          'swrap-builder-draft@1',
+          JSON.stringify({
+            title: draft.title ?? form.title ?? '',
+            fields: normalizedFields,
+            slug: form.slug ?? '',
+            savedAt: form.updatedAt || new Date().toISOString(),
+            version: 1,
+            syncStatus: 'synced',
+          }),
+        );
+      } catch {}
+      setSyncStatus('synced', form.updatedAt);
+    }
+
     // Priority 1: load from DB if initialDraftFormId provided (from ?draft= URL param)
     if (initialDraftFormId) {
       setDraftFormId(initialDraftFormId);
-      // Fetch draft from API to restore fields
       fetch(`/api/forms/${initialDraftFormId}`)
         .then((res) => res.ok ? res.json() : null)
-        .then((data: { data?: { form?: { title?: string; draftSchema?: { fields?: PocField[]; title?: string } } } } | null) => {
+        .then((data: { data?: { form?: any } } | null) => {
           if (!data?.data?.form) return;
-          const form = data.data.form;
-          const draft = form.draftSchema;
-          if (draft?.fields && draft.fields.length > 0) {
-            // Normalize options: draftSchema may have options as string[] (canvas-native)
-            // or as {id,label,value}[] (API format from older createFormDraft).
-            // Builder needs string[].
-            const normalizedFields: PocField[] = draft.fields.map((f) => {
-              const rawOptions = (f as PocField & { options?: unknown }).options;
-              let options: string[] | undefined;
-              if (Array.isArray(rawOptions) && rawOptions.length > 0) {
-                // Detect format: if first element is string, it's already string[]
-                if (typeof rawOptions[0] === 'string') {
-                  options = rawOptions as string[];
-                } else {
-                  // API format: [{id, label, value}] → extract label strings
-                  options = (rawOptions as { label?: string }[]).map((o) => o.label ?? '').filter(Boolean);
-                }
-              }
-              return { ...f, ...(options !== undefined ? { options } : {}) };
-            });
-            loadDraft({
-              fields: normalizedFields,
-              title: draft.title ?? form.title ?? '',
-              theme: 'minimal',
-              bannerUrl: null,
-            });
-          } else if (form.title) {
-            loadDraft({ fields: [], title: form.title, theme: 'minimal', bannerUrl: null });
-          }
+          processDraft(data.data.form);
         })
         .catch(() => {
-          // API failed — fall back to localStorage
           loadFromLocalStorage();
         });
       return;
     }
 
     // Priority 2: restore from persisted draft session (lastDraftFormId in localStorage).
-    // This fires when the user navigates to /dashboard/forms/new without a ?draft= param
-    // but previously had a draft session (e.g. came back after closing the tab).
     if (lastDraftFormIdRef.current && !showTemplatePicker) {
       const savedId = lastDraftFormIdRef.current;
       setDraftFormId(savedId);
-      // Update URL so a subsequent refresh also recovers correctly
       try {
         const url = new URL(window.location.href);
         if (!url.searchParams.get('draft')) {
           url.searchParams.set('draft', savedId);
           window.history.replaceState(null, '', url.toString());
         }
-      } catch {
-        // non-fatal
-      }
+      } catch {}
+
       fetch(`/api/forms/${savedId}`)
         .then((res) => res.ok ? res.json() : null)
-        .then((data: { data?: { form?: { title?: string; draftSchema?: { fields?: PocField[]; title?: string } } } } | null) => {
+        .then((data: { data?: { form?: any } } | null) => {
           if (!data?.data?.form) {
-            // Draft no longer exists in DB — fall back to localStorage
             loadFromLocalStorage();
             return;
           }
-          const form = data.data.form;
-          const draft = form.draftSchema;
-          if (draft?.fields && draft.fields.length > 0) {
-            const normalizedFields: PocField[] = draft.fields.map((f) => {
-              const rawOptions = (f as PocField & { options?: unknown }).options;
-              let options: string[] | undefined;
-              if (Array.isArray(rawOptions) && rawOptions.length > 0) {
-                if (typeof rawOptions[0] === 'string') {
-                  options = rawOptions as string[];
-                } else {
-                  options = (rawOptions as { label?: string }[]).map((o) => o.label ?? '').filter(Boolean);
-                }
-              }
-              return { ...f, ...(options !== undefined ? { options } : {}) };
-            });
-            loadDraft({
-              fields: normalizedFields,
-              title: draft.title ?? form.title ?? '',
-              theme: 'minimal',
-              bannerUrl: null,
-            });
-          } else if (form.title) {
-            loadDraft({ fields: [], title: form.title, theme: 'minimal', bannerUrl: null });
-          }
+          processDraft(data.data.form);
         })
         .catch(() => {
-          // DB fetch failed — fall back to localStorage field data
           loadFromLocalStorage();
         });
       return;
@@ -279,8 +303,8 @@ export function CanvasBuilderPage({
       return;
     }
 
-    if (showTemplatePicker && fields.length === 0) return; // let template picker handle it
-    if (fields.length > 0) return; // already have content
+    if (showTemplatePicker && fields.length === 0) return;
+    if (fields.length > 0) return;
     loadFromLocalStorage();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isImport]);
@@ -295,7 +319,7 @@ export function CanvasBuilderPage({
         }
         return;
       }
-      const storedDraft = JSON.parse(raw) as { fields: PocField[]; title: string; version?: number };
+      const storedDraft = JSON.parse(raw) as { fields: PocField[]; title: string; slug?: string; version?: number };
       
       // Validate schema version
       if (storedDraft.version !== 1) {
@@ -319,6 +343,7 @@ export function CanvasBuilderPage({
         loadDraft({
           fields: validatedFields,
           title: typeof storedDraft.title === 'string' ? storedDraft.title : '',
+          slug: typeof storedDraft.slug === 'string' ? storedDraft.slug : '',
           theme: 'minimal',
           bannerUrl: null,
         });

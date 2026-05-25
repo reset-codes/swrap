@@ -37,6 +37,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import * as Switch from '@radix-ui/react-switch';
 import { Settings2, Lock, Plus, Trash2, Info } from 'lucide-react';
 import { type PocField } from './FieldCard';
+import { useFormBuilderStore } from '../../stores/form-builder-store';
 
 // ---------------------------------------------------------------------------
 // Motion variants
@@ -493,6 +494,76 @@ function FieldControls({ field, onUpdate }: FieldControlsProps) {
 }
 
 // ---------------------------------------------------------------------------
+// FormSettingsPanel (shown when no field is selected — form settings mode)
+// ---------------------------------------------------------------------------
+
+function FormSettingsPanel() {
+  const title = useFormBuilderStore((s) => s.title);
+  const setTitle = useFormBuilderStore((s) => s.setTitle);
+  const slug = useFormBuilderStore((s) => s.slug);
+  const setSlug = useFormBuilderStore((s) => s.setSlug);
+
+  const handleSlugChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const sanitised = e.target.value
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, '-')
+      .replace(/-+/g, '-');
+    setSlug(sanitised);
+  };
+
+  const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://swrap.app';
+  const slugPreview = slug ? `${appUrl.replace(/^https?:\/\//, '')}/f/${slug}` : 'swrap.app/f/…';
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-2 border-b border-border-subtle pb-4">
+        <Settings2 className="text-text-secondary h-4.5 w-4.5" />
+        <h2 className="text-sm font-semibold text-text-primary">Form Settings</h2>
+      </div>
+
+      {/* Form Title */}
+      <div className="flex flex-col gap-1.5">
+        <ControlLabel htmlFor="form-settings-title">Form Title</ControlLabel>
+        <input
+          id="form-settings-title"
+          type="text"
+          value={title}
+          placeholder="Untitled Form"
+          onChange={(e) => setTitle(e.target.value)}
+          className="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-1.5 text-sm text-text-primary placeholder:text-text-tertiary transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-1 hover:border-border-strong"
+        />
+      </div>
+
+      {/* URL Slug */}
+      <div className="flex flex-col gap-1.5">
+        <ControlLabel htmlFor="form-settings-slug">URL Slug</ControlLabel>
+        <input
+          id="form-settings-slug"
+          type="text"
+          value={slug}
+          placeholder="my-custom-slug"
+          onChange={handleSlugChange}
+          className="w-full rounded-md border border-border-subtle bg-bg-surface px-3 py-1.5 text-sm text-text-primary placeholder:text-text-tertiary transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-1 hover:border-border-strong"
+        />
+        <div className="mt-1 flex flex-col gap-1">
+          <span className="text-token-xs text-text-tertiary uppercase font-mono tracking-wide">
+            Slug Preview
+          </span>
+          <span className="font-mono text-xs text-text-secondary truncate block bg-bg-muted px-2 py-1 rounded border border-border-subtle">
+            {slugPreview}
+          </span>
+        </div>
+      </div>
+      
+      {/* Information Banner */}
+      <StaticNote>
+        Draft slugs are auto-saved and can be customized freely. Slugs become permanent and immutable once the form is published.
+      </StaticNote>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // InspectorPanel
 // ---------------------------------------------------------------------------
 
@@ -537,13 +608,13 @@ export function InspectorPanel({
     </motion.div>
   ) : (
     <motion.div
-      key="empty-state"
+      key="form-settings"
       variants={variants}
       initial="hidden"
       animate="visible"
       exit="exit"
     >
-      <EmptyState />
+      <FormSettingsPanel />
     </motion.div>
   );
 

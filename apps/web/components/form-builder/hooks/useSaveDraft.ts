@@ -110,6 +110,8 @@ function saveToLocalStorage(title: string, fields: PocField[]): void {
 export function useSaveDraft() {
   const fields = useFormBuilderStore((s) => s.fields);
   const title = useFormBuilderStore((s) => s.title);
+  const slug = useFormBuilderStore((s) => s.slug);
+  const setSlug = useFormBuilderStore((s) => s.setSlug);
   const draftFormId = useFormBuilderStore((s) => s.draftFormId);
   const setAutosaveStatus = useFormBuilderStore((s) => s.setAutosaveStatus);
   const setDraftFormId = useFormBuilderStore((s) => s.setDraftFormId);
@@ -132,6 +134,7 @@ export function useSaveDraft() {
     const apiFields = fields.map((f, i) => pocFieldToApiField(f, i, false));
     const body = {
       title: title || 'Untitled Form',
+      slug: slug || undefined,
       mode: 'table' as const,
       encryptionMode: 'none' as const,
       fields: apiFields,
@@ -151,6 +154,7 @@ export function useSaveDraft() {
         JSON.stringify({
           title: title || 'Untitled Form',
           fields,
+          slug,
           savedAt: new Date().toISOString(),
           version: 1, // draft key schema version
           draftVersion: nextVersion,
@@ -176,6 +180,7 @@ export function useSaveDraft() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             title: title || 'Untitled Form',
+            slug: slug || undefined,
             mode: 'table' as const,
             encryptionMode: 'none' as const,
             fields: updateFields,
@@ -193,8 +198,10 @@ export function useSaveDraft() {
 
       if (response.ok) {
         console.log('[Draft Save] Backend success');
-        const data = await response.json() as { data?: { id?: string } };
+        const data = await response.json() as { data?: { id?: string; slug?: string } };
         setSyncStatus('synced', new Date().toISOString());
+
+        const savedSlug = data?.data?.slug || slug;
 
         // Update local storage to reflect synced state
         try {
@@ -203,6 +210,7 @@ export function useSaveDraft() {
             JSON.stringify({
               title: title || 'Untitled Form',
               fields,
+              slug: savedSlug,
               savedAt: new Date().toISOString(),
               version: 1,
               draftVersion: nextVersion,
@@ -213,7 +221,11 @@ export function useSaveDraft() {
 
         if (!draftFormId && data?.data?.id) {
           const newId = data.data.id;
+          const newSlug = data.data.slug;
           setDraftFormId(newId);
+          if (newSlug) {
+            setSlug(newSlug);
+          }
           // Persist the new draft ID to localStorage for cross-session recovery
           recordDraftSave(newId, title || 'Untitled Form');
           // Clear guest import draft since it is now successfully saved in the DB
