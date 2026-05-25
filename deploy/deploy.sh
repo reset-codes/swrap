@@ -33,11 +33,9 @@ health_check() {
     local max_retries="${1:-12}"
     local retry=0
     while [ $retry -lt "$max_retries" ]; do
-        echo "  Executing health probe..."
         local res=0
         local output
         output=$(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T api wget -qO- http://localhost:4000/health 2>&1) || res=$?
-        echo "  Probe output: $output (exit status: $res)"
         if [ $res -eq 0 ] && echo "$output" | grep -q '"status":"ok"'; then
             return 0
         fi
