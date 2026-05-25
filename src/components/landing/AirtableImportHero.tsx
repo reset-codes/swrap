@@ -106,6 +106,7 @@ export function AirtableImportHero() {
           title: data.data.title || 'Imported Form',
           fields: data.data.fields,
           savedAt: new Date().toISOString(),
+          version: 1,
         }));
       }
 

@@ -38,11 +38,13 @@ const BodySchema = z.object({
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
 export async function POST(request: Request) {
+  console.log('[API] Processing Airtable import request.');
   // ── Parse input ────────────────────────────────────────────────────────────
   let body: unknown
   try {
     body = await request.json()
   } catch {
+    console.error('[API] Parse request body failed: Invalid JSON');
     return NextResponse.json(
       apiError('VALIDATION_ERROR', 'Request body must be valid JSON.'),
       { status: 400 },
@@ -52,6 +54,7 @@ export async function POST(request: Request) {
   const parsed = BodySchema.safeParse(body)
   if (!parsed.success) {
     const msg = parsed.error.errors.map((e) => e.message).join('; ')
+    console.warn('[API] Input validation failed:', msg);
     return NextResponse.json(apiError('VALIDATION_ERROR', msg), { status: 400 })
   }
 
@@ -61,11 +64,13 @@ export async function POST(request: Request) {
   let scraped: Awaited<ReturnType<typeof scrapeAirtableSharedForm>>
   try {
     scraped = await scrapeAirtableSharedForm(url)
+    console.log('[API] Airtable import success: fields =', scraped.fields.length);
   } catch (err) {
     const message =
       err instanceof Error
         ? err.message
         : 'Could not import this Airtable form yet.'
+    console.error('[API] Airtable import failed:', message);
     return NextResponse.json(apiError('IMPORT_FAILED', message), { status: 422 })
   }
 
@@ -127,7 +132,7 @@ export async function POST(request: Request) {
         fields: canvasFields,
         fieldCount: canvasFields.length,
         skipped: scraped.skipped,
-        redirectUrl: '/dashboard/forms/new', // Frontend will handle loading the data
+        redirectUrl: '/dashboard/forms/new?import=local', // Frontend will handle loading the data
       }),
     )
   }

@@ -189,6 +189,7 @@ function ImportInput({ size = 'lg', autoFocus = false }: { size?: 'sm' | 'lg'; a
           title: data.data.title || 'Imported Form',
           fields: data.data.fields,
           savedAt: new Date().toISOString(),
+          version: 1,
         }));
       }
 

@@ -15,17 +15,19 @@ import { auth } from '@/lib/auth';
 import { CanvasBuilderPage } from '@poc/apps/web/components/form-builder';
 
 export default async function NewFormPage(props: {
-  searchParams: Promise<{ draft?: string }>;
+  searchParams: Promise<{ draft?: string; import?: string }>;
 }) {
   const searchParams = await props.searchParams;
   const session = await auth();
   const draftId = searchParams.draft;
+  const isImport = searchParams.import === 'local';
 
   return (
     <CanvasBuilderPage
       initialDraftFormId={draftId}
-      showTemplatePicker={!draftId}
+      showTemplatePicker={!draftId && !isImport}
       isGuest={!session?.user}
+      isImport={isImport}
     />
   );
 }

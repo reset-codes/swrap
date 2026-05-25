@@ -61,6 +61,8 @@ interface CanvasBuilderPageProps {
   showTemplatePicker?: boolean;
   /** Whether the user is unauthenticated (guest flow). */
   isGuest?: boolean;
+  /** Whether we are loading an imported guest draft from localStorage. */
+  isImport?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -72,6 +74,7 @@ export function CanvasBuilderPage({
   initialDraftFormId,
   showTemplatePicker = false,
   isGuest = false,
+  isImport = false,
 }: CanvasBuilderPageProps) {
   // ── Zustand store selectors ─────────────────────────────────────────────
   const fields = useFormBuilderStore((s) => s.fields);
@@ -168,6 +171,7 @@ export function CanvasBuilderPage({
 
   // ── Load draft on first mount ────────────────────────────────────────────
   React.useEffect(() => {
+    console.log('[Builder Init] Mount: draftId =', initialDraftFormId, 'isImport =', isImport, 'isGuest =', isGuest);
     // Priority 1: load from DB if initialDraftFormId provided (from ?draft= URL param)
     if (initialDraftFormId) {
       setDraftFormId(initialDraftFormId);
@@ -269,27 +273,68 @@ export function CanvasBuilderPage({
       return;
     }
 
+    // Priority 3: load guest import draft from localStorage
+    if (isImport) {
+      loadFromLocalStorage();
+      return;
+    }
+
     if (showTemplatePicker && fields.length === 0) return; // let template picker handle it
     if (fields.length > 0) return; // already have content
     loadFromLocalStorage();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isImport]);
 
   function loadFromLocalStorage() {
     try {
       const raw = localStorage.getItem('swrap-builder-draft@1');
-      if (!raw) return;
-      const storedDraft = JSON.parse(raw) as { fields: PocField[]; title: string };
+      if (!raw) {
+        console.warn('[Builder Init] No draft found in localStorage under key swrap-builder-draft@1.');
+        if (isImport) {
+          setShowTemplateModal(true);
+        }
+        return;
+      }
+      const storedDraft = JSON.parse(raw) as { fields: PocField[]; title: string; version?: number };
+      
+      // Validate schema version
+      if (storedDraft.version !== 1) {
+        console.warn(`[Builder Init] Ignoring incompatible localStorage draft version: ${storedDraft.version ?? 'none'} (expected: 1).`);
+        if (isImport) {
+          setShowTemplateModal(true);
+        }
+        return;
+      }
+
       if (storedDraft.fields?.length > 0 || storedDraft.title) {
+        // Validate draft structure: ensure fields is an array and each field has required keys
+        const validatedFields = Array.isArray(storedDraft.fields)
+          ? storedDraft.fields.filter(
+              (f) => f && typeof f === 'object' && typeof f.id === 'string' && typeof f.type === 'string'
+            )
+          : [];
+        
+        console.log(`[Builder Init] Successfully validated and loading localStorage draft: "${storedDraft.title}", fields: ${validatedFields.length}`);
+        
         loadDraft({
-          fields: storedDraft.fields ?? [],
-          title: storedDraft.title ?? '',
+          fields: validatedFields,
+          title: typeof storedDraft.title === 'string' ? storedDraft.title : '',
           theme: 'minimal',
           bannerUrl: null,
         });
+        // Close the template modal since we loaded the imported fields successfully
+        setShowTemplateModal(false);
+      } else {
+        console.warn('[Builder Init] LocalStorage draft contains no fields or title.');
+        if (isImport) {
+          setShowTemplateModal(true);
+        }
       }
-    } catch {
-      // Corrupt draft — ignore
+    } catch (err) {
+      console.error('[Builder Init] Failed to parse or load localStorage draft:', err);
+      if (isImport) {
+        setShowTemplateModal(true);
+      }
     }
   }
 

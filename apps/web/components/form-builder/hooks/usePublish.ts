@@ -123,6 +123,9 @@ export function usePublish() {
       setPublishStatus('published');
       // Clear the persisted draft session — form is now published
       clearDraftSession();
+      try {
+        localStorage.removeItem('swrap-builder-draft@1');
+      } catch {}
       toast.success('Form published!', {
         description: `Your form is live at: ${publicUrl}`,
         action: publicUrl

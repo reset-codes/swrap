@@ -163,6 +163,10 @@ export function useSaveDraft() {
           setDraftFormId(newId);
           // Persist the new draft ID to localStorage for cross-session recovery
           recordDraftSave(newId, title || 'Untitled Form');
+          // Clear guest import draft since it is now successfully saved in the DB
+          try {
+            localStorage.removeItem('swrap-builder-draft@1');
+          } catch {}
           // Update the browser URL to include ?draft=:id so page refresh
           // restores the correct draft context (no navigation, no flicker).
           try {
