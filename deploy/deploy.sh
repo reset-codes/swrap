@@ -33,7 +33,7 @@ health_check() {
     local max_retries="${1:-12}"
     local retry=0
     while [ $retry -lt "$max_retries" ]; do
-        if curl -sf http://localhost:4000/health | grep -q '"status":"ok"'; then
+        if docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T api wget -qO- http://localhost:4000/health 2>/dev/null | grep -q '"status":"ok"'; then
             return 0
         fi
         retry=$((retry + 1))
@@ -54,7 +54,7 @@ show_status() {
     echo "  Container status:"
     docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" ps 2>/dev/null || echo "  (not running)"
     echo ""
-    echo "  Health: $(curl -sf http://localhost:4000/health 2>/dev/null || echo 'UNREACHABLE')"
+    echo "  Health: $(docker compose -f "$COMPOSE_FILE" --env-file "$ENV_FILE" exec -T api wget -qO- http://localhost:4000/health 2>/dev/null | grep -o '"status":"[^"]*"' || echo 'UNREACHABLE')"
     echo ""
     if [ -f "$DEPLOY_LOG" ]; then
         echo "  Last 5 deployments:"
