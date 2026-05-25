@@ -120,64 +120,65 @@ export async function POST(request: Request) {
   }
 
   // ── Auth Check for Persistence ─────────────────────────────────────────────
-  const session = await auth()
-
-  if (!session?.user?.id) {
-    // GUEST FLOW: Return the scraped data directly.
-    // The frontend will save this to localStorage and navigate to the builder.
-    return NextResponse.json(
-      apiSuccess({
-        isGuest: true,
-        title: scraped.title,
-        fields: canvasFields,
-        fieldCount: canvasFields.length,
-        skipped: scraped.skipped,
-        redirectUrl: '/dashboard/forms/new?import=local', // Frontend will handle loading the data
-      }),
-    )
-  }
-
-  // ── AUTHENTICATED FLOW: Create draft in DB ────────────────────────────────
-  // Ensure slug uniqueness
-  const slugExists = await prisma.form.findUnique({ where: { slug } })
-  if (slugExists) slug = `${slug}-${Math.random().toString(36).slice(2, 6)}`
-
-  let form: { id: string; title: string }
+  let session = null
   try {
-    form = await prisma.form.create({
-      data: {
-        id:            formId,
-        slug,
-        title:         scraped.title,
-        description:   scraped.description,
-        ownerId:       session.user.id,
-        schemaBlobId:  null,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        draftSchema:   draftSchema as any,
-        mode:          'table',
-        encryptionMode:'none',
-        sealPolicyId:  null,
-        isPublished:   false,
-      },
-      select: { id: true, title: true },
-    })
+    session = await auth()
   } catch (err) {
-    console.error('[POST /api/import/url] Draft creation failed:', err)
-    return NextResponse.json(
-      apiError('INTERNAL_ERROR', 'Failed to save imported form. Please try again.'),
-      { status: 500 },
-    )
+    console.warn('[API] auth() check failed, falling back to guest mode:', err)
   }
 
+  if (session?.user?.id) {
+    // ── AUTHENTICATED FLOW: Create draft in DB ────────────────────────────────
+    try {
+      // Ensure slug uniqueness
+      const slugExists = await prisma.form.findUnique({ where: { slug } })
+      if (slugExists) slug = `${slug}-${Math.random().toString(36).slice(2, 6)}`
+
+      const form = await prisma.form.create({
+        data: {
+          id:            formId,
+          slug,
+          title:         scraped.title,
+          description:   scraped.description,
+          ownerId:       session.user.id,
+          schemaBlobId:  null,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          draftSchema:   draftSchema as any,
+          mode:          'table',
+          encryptionMode:'none',
+          sealPolicyId:  null,
+          isPublished:   false,
+        },
+        select: { id: true, title: true },
+      })
+
+      return NextResponse.json(
+        apiSuccess({
+          formId: form.id,
+          title: form.title,
+          fieldCount: scraped.fields.length,
+          skipped: scraped.skipped,
+          redirectUrl: `/dashboard/forms/new?draft=${form.id}`,
+        }),
+        { status: 201 },
+      )
+    } catch (dbErr) {
+      console.warn('[API] DB operations failed for authenticated user, falling back to guest mode:', dbErr)
+      // Fall through to guest flow
+    }
+  }
+
+  // GUEST FLOW: Return the scraped data directly.
+  // The frontend will save this to localStorage and navigate to the builder.
   return NextResponse.json(
     apiSuccess({
-      formId: form.id,
-      title: form.title,
-      fieldCount: scraped.fields.length,
+      isGuest: true,
+      title: scraped.title,
+      fields: canvasFields,
+      fieldCount: canvasFields.length,
       skipped: scraped.skipped,
-      redirectUrl: `/dashboard/forms/new?draft=${form.id}`,
+      redirectUrl: '/dashboard/forms/new?import=local', // Frontend will handle loading the data
     }),
-    { status: 201 },
   )
 }
 
