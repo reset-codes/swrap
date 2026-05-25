@@ -34,18 +34,22 @@ import type { ServerConfig } from '../server-config';
 
 vi.mock('../services/walrus-service', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../services/walrus-service')>();
+  const mockWalrusPut = vi.fn(async (bytes: Uint8Array) => {
+    // Return a deterministic blob ID based on content
+    let hash = 0;
+    for (let i = 0; i < bytes.length; i++) {
+      hash = (Math.imul(31, hash) + bytes[i]) >>> 0;
+    }
+    return {
+      blobId: `mock-blob-${hash.toString(16).padStart(8, '0')}-${bytes.length}`,
+      sizeBytes: bytes.length,
+    };
+  });
   return {
     ...actual,
-    walrusPut: vi.fn(async (bytes: Uint8Array) => {
-      // Return a deterministic blob ID based on content
-      let hash = 0;
-      for (let i = 0; i < bytes.length; i++) {
-        hash = (Math.imul(31, hash) + bytes[i]) >>> 0;
-      }
-      return {
-        blobId: `mock-blob-${hash.toString(16).padStart(8, '0')}-${bytes.length}`,
-        sizeBytes: bytes.length,
-      };
+    walrusPut: mockWalrusPut,
+    walrusPutWithCliFallback: vi.fn(async (bytes: Uint8Array) => {
+      return mockWalrusPut(bytes);
     }),
     walrusBlobExists: vi.fn(async (_blobId: string) => true),
   };

@@ -17,6 +17,7 @@
  * Requirements: Phase 1 Task 4+5 (drafts persist, preview works)
  */
 
+import { useRef } from 'react';
 import { useFormBuilderStore } from '../../../stores/form-builder-store';
 import { useDraftSessionStore } from '../../../stores/draft-session-store';
 import type { PocField } from '../FieldCard';
@@ -113,25 +114,59 @@ export function useSaveDraft() {
   const setAutosaveStatus = useFormBuilderStore((s) => s.setAutosaveStatus);
   const setDraftFormId = useFormBuilderStore((s) => s.setDraftFormId);
   const recordDraftSave = useDraftSessionStore((s) => s.recordDraftSave);
+  const setSyncStatus = useFormBuilderStore((s) => s.setSyncStatus);
+  const incrementDraftVersion = useFormBuilderStore((s) => s.incrementDraftVersion);
+  const draftVersion = useFormBuilderStore((s) => s.draftVersion);
+
+  const isSavingRef = useRef<boolean>(false);
 
   async function saveDraft() {
+    if (isSavingRef.current) {
+      console.warn('[Draft Save] Save already in progress, ignoring duplicate trigger.');
+      return;
+    }
+    isSavingRef.current = true;
     setAutosaveStatus('saving');
 
-    // 1. Always save to localStorage first (instant, offline-safe)
-    saveToLocalStorage(title, fields);
+    console.log('[Draft Save] Preparing payload');
+    const apiFields = fields.map((f, i) => pocFieldToApiField(f, i, false));
+    const body = {
+      title: title || 'Untitled Form',
+      mode: 'table' as const,
+      encryptionMode: 'none' as const,
+      fields: apiFields,
+      isDraft: true,  // skip Walrus write — create DB-only draft
+    };
+    const bodyString = JSON.stringify(body);
+    const sizeKb = (new Blob([bodyString]).size / 1024).toFixed(2);
+    console.log(`[Draft Save] Payload size = ${sizeKb} KB`);
+
+    incrementDraftVersion();
+    const nextVersion = draftVersion + 1;
+
+    console.log('[Draft Save] Saving locally');
+    try {
+      localStorage.setItem(
+        DRAFT_KEY,
+        JSON.stringify({
+          title: title || 'Untitled Form',
+          fields,
+          savedAt: new Date().toISOString(),
+          version: 1, // draft key schema version
+          draftVersion: nextVersion,
+          syncStatus: 'local-only',
+        }),
+      );
+      setSyncStatus('local-only', new Date().toISOString());
+    } catch (err) {
+      console.error('[Draft Save] Local save failed:', err);
+    }
 
     // 2. Try to persist to the backend API
     try {
-      const apiFields = fields.map((f, i) => pocFieldToApiField(f, i, false));
-      const body = {
-        title: title || 'Untitled Form',
-        mode: 'table' as const,
-        encryptionMode: 'none' as const,
-        fields: apiFields,
-        isDraft: true,  // skip Walrus write — create DB-only draft
-      };
-
       let response: Response;
+      console.log('[Draft Save] Persisting to backend');
+      setSyncStatus('syncing');
 
       if (draftFormId) {
         // Update existing draft — pass fields using the loose draft format
@@ -152,12 +187,30 @@ export function useSaveDraft() {
         response = await fetch('/api/forms', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
+          body: bodyString,
         });
       }
 
       if (response.ok) {
+        console.log('[Draft Save] Backend success');
         const data = await response.json() as { data?: { id?: string } };
+        setSyncStatus('synced', new Date().toISOString());
+
+        // Update local storage to reflect synced state
+        try {
+          localStorage.setItem(
+            DRAFT_KEY,
+            JSON.stringify({
+              title: title || 'Untitled Form',
+              fields,
+              savedAt: new Date().toISOString(),
+              version: 1,
+              draftVersion: nextVersion,
+              syncStatus: 'synced',
+            }),
+          );
+        } catch {}
+
         if (!draftFormId && data?.data?.id) {
           const newId = data.data.id;
           setDraftFormId(newId);
@@ -183,24 +236,30 @@ export function useSaveDraft() {
         setAutosaveStatus('saved');
         toast.success('Draft saved', { description: 'Your form has been saved.' });
       } else if (response.status === 401) {
-        // Genuinely unauthenticated — session expired or not signed in
+        console.log('[Draft Save] Backend failed: 401 Unauthorized');
+        setSyncStatus('local-only');
         setAutosaveStatus('saved');
         toast.success('Saved locally', {
           description: 'Sign in to sync across devices.',
         });
       } else {
-        // API error (5xx, 4xx) but localStorage succeeded — surface as error
+        const errorText = await response.text();
+        console.error('[Draft Save] Backend failed:', errorText);
+        setSyncStatus('sync-failed');
         setAutosaveStatus('error');
-        const errorBody = await response.json().catch(() => ({})) as { error?: { message?: string } };
+        const errorBody = JSON.parse(errorText || '{}') as { error?: { message?: string } };
         const message = errorBody?.error?.message ?? 'Save failed. Retrying next time.';
         toast.error('Save failed', { description: message });
       }
-    } catch {
-      // Network error — localStorage succeeded, show warning not fake success
+    } catch (err) {
+      console.error('[Draft Save] Backend failed:', err);
+      setSyncStatus('sync-failed');
       setAutosaveStatus('error');
       toast.error('Save failed', {
         description: 'Could not reach the server. Draft saved locally.',
       });
+    } finally {
+      isSavingRef.current = false;
     }
   }
 

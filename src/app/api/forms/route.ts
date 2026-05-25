@@ -8,6 +8,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { auth } from '@/lib/auth'
+import { getCanonicalUserId } from '@/lib/auth/canonical'
 import { apiError, apiSuccess } from '@/types/api'
 import {
   createForm,
@@ -58,7 +59,8 @@ const CreateFormBodySchema = z.object({
 
 export async function GET() {
   const session = await auth()
-  if (!session?.user?.id) {
+  const canonicalUserId = await getCanonicalUserId(session)
+  if (!canonicalUserId) {
     return NextResponse.json(
       apiError('UNAUTHORIZED', 'Authentication required.'),
       { status: 401 },
@@ -66,7 +68,7 @@ export async function GET() {
   }
 
   try {
-    const forms = await getFormsByOwner(session.user.id)
+    const forms = await getFormsByOwner(canonicalUserId)
     return NextResponse.json(apiSuccess(forms))
   } catch (err) {
     if (err instanceof ServiceError) {
@@ -85,8 +87,12 @@ export async function GET() {
 // ─── POST /api/forms ──────────────────────────────────────────────────────────
 
 export async function POST(request: Request) {
+  console.log('[API Forms] Request received')
   const session = await auth()
-  if (!session?.user?.id) {
+  const canonicalUserId = await getCanonicalUserId(session)
+  console.log('[API Forms] User authenticated =', !!canonicalUserId)
+  
+  if (!canonicalUserId) {
     return NextResponse.json(
       apiError('UNAUTHORIZED', 'Authentication required.'),
       { status: 401 },
@@ -114,52 +120,14 @@ export async function POST(request: Request) {
     })
   }
 
-  // Ensure the user exists in the DB — covers the race where signIn callback
-  // ran before the DB was available, leaving the user without a Prisma record.
-  try {
-    const { prisma } = await import('@/lib/prisma/client')
-    const existing = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { id: true },
-    })
-    if (!existing) {
-      // User record missing — attempt to create it now
-      if (session.user.email) {
-        await prisma.$transaction(async (tx) => {
-          const u = await tx.user.upsert({
-            where: { email: session.user.email! },
-            create: {
-              id: session.user.id,
-              email: session.user.email!,
-              name: session.user.name ?? null,
-              image: session.user.image ?? null,
-              role: 'admin',
-            },
-            update: {},
-          })
-          const creditExists = await tx.storageCredit.findUnique({
-            where: { userId: u.id },
-          })
-          if (!creditExists) {
-            await tx.storageCredit.create({ data: { userId: u.id, balance: 100 } })
-          }
-        })
-      } else {
-        return NextResponse.json(
-          apiError('UNAUTHORIZED', 'User account not found. Please sign out and sign in again.'),
-          { status: 401 },
-        )
-      }
-    }
-  } catch (dbErr) {
-    // DB check failed — log and continue; createForm will surface the error
-    console.error('[POST /api/forms] User existence check failed:', dbErr instanceof Error ? dbErr.message : dbErr)
-  }
+  console.log('[API Forms] Draft validation passed')
 
   try {
+    console.log('[API Forms] DB write started')
     const form = parsed.data.isDraft
-      ? await createFormDraft(session.user.id, parsed.data)
-      : await createForm(session.user.id, parsed.data)
+      ? await createFormDraft(canonicalUserId, parsed.data)
+      : await createForm(canonicalUserId, parsed.data)
+    console.log('[API Forms] DB write success')
     return NextResponse.json(apiSuccess(form), { status: 201 })
   } catch (err) {
     if (err instanceof ServiceError) {
@@ -168,9 +136,9 @@ export async function POST(request: Request) {
         status: err.statusCode,
       })
     }
-    console.error('[POST /api/forms] Unexpected error:', err instanceof Error ? err.stack : err)
+    console.error('[API Forms] DB write failed:', err instanceof Error ? err.stack : err)
     return NextResponse.json(
-      apiError('INTERNAL_ERROR', 'An unexpected error occurred.'),
+      apiError('INTERNAL_ERROR', err instanceof Error ? err.message : 'An unexpected error occurred during database write.'),
       { status: 500 },
     )
   }

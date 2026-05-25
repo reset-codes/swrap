@@ -25,6 +25,8 @@ export type FormTheme =
 
 export type AutosaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
+export type SyncStatus = 'local-only' | 'syncing' | 'synced' | 'sync-failed';
+
 export type PublishStatus = 'idle' | 'publishing' | 'published' | 'error';
 
 export type InspectorTab = 'content' | 'validation' | 'privacy' | 'style';
@@ -55,6 +57,9 @@ export interface FormBuilderState {
   // --- Editor UI state (not snapshotted) ---
   selectedFieldId: string | null;
   autosaveStatus: AutosaveStatus;
+  syncStatus: SyncStatus;
+  saveTimestamp: string | null;
+  draftVersion: number;
   /** Draft form ID from the database — set after first save. */
   draftFormId: string | null;
   publishStatus: PublishStatus;
@@ -81,6 +86,8 @@ export interface FormBuilderState {
 
   // --- Autosave / Publish status ---
   setAutosaveStatus(status: AutosaveStatus): void;
+  setSyncStatus(status: SyncStatus, timestamp?: string | null): void;
+  incrementDraftVersion(): void;
   setPublishStatus(status: PublishStatus, error?: string): void;
 
   // --- Draft form ID (set after first save to DB) ---
@@ -107,6 +114,9 @@ const INITIAL_STATE: Pick<
   | 'bannerUrl'
   | 'selectedFieldId'
   | 'autosaveStatus'
+  | 'syncStatus'
+  | 'saveTimestamp'
+  | 'draftVersion'
   | 'draftFormId'
   | 'publishStatus'
   | 'publishError'
@@ -119,6 +129,9 @@ const INITIAL_STATE: Pick<
   bannerUrl: null,
   selectedFieldId: null,
   autosaveStatus: 'idle',
+  syncStatus: 'local-only',
+  saveTimestamp: null,
+  draftVersion: 1,
   draftFormId: null,
   publishStatus: 'idle',
   publishError: null,
@@ -280,6 +293,17 @@ export const useFormBuilderStore = create<FormBuilderState>()(
 
     setAutosaveStatus(status: AutosaveStatus) {
       set({ autosaveStatus: status });
+    },
+
+    setSyncStatus(status: SyncStatus, timestamp?: string | null) {
+      set({
+        syncStatus: status,
+        ...(timestamp !== undefined ? { saveTimestamp: timestamp } : {}),
+      });
+    },
+
+    incrementDraftVersion() {
+      set((s) => ({ draftVersion: s.draftVersion + 1 }));
     },
 
     setPublishStatus(status: PublishStatus, error?: string) {

@@ -65,14 +65,18 @@ vi.mock('../services/infrastructure-wallet', async (importOriginal) => {
 
 vi.mock('../services/walrus-service', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../services/walrus-service')>();
+  const mockWalrusPut = vi.fn(async (bytes: Uint8Array) => {
+    let hash = 0;
+    for (let i = 0; i < bytes.length; i++) {
+      hash = (Math.imul(31, hash) + bytes[i]) >>> 0;
+    }
+    return { blobId: `mock-blob-${hash.toString(16).padStart(8, '0')}-${bytes.length}`, sizeBytes: bytes.length };
+  });
   return {
     ...actual,
-    walrusPut: vi.fn(async (bytes: Uint8Array) => {
-      let hash = 0;
-      for (let i = 0; i < bytes.length; i++) {
-        hash = (Math.imul(31, hash) + bytes[i]) >>> 0;
-      }
-      return { blobId: `mock-blob-${hash.toString(16).padStart(8, '0')}-${bytes.length}`, sizeBytes: bytes.length };
+    walrusPut: mockWalrusPut,
+    walrusPutWithCliFallback: vi.fn(async (bytes: Uint8Array) => {
+      return mockWalrusPut(bytes);
     }),
     walrusBlobExists: vi.fn(async (_blobId: string) => true),
     walrusGet: vi.fn(async (_blobId: string, _expectedDigest?: string) => {

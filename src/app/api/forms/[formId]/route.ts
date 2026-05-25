@@ -9,6 +9,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { auth } from '@/lib/auth'
+import { getCanonicalUserId } from '@/lib/auth/canonical'
 import { apiError, apiSuccess } from '@/types/api'
 import {
   deleteForm,
@@ -55,7 +56,8 @@ type RouteContext = { params: Promise<{ formId: string }> }
 
 export async function GET(_request: Request, { params }: RouteContext) {
   const session = await auth()
-  if (!session?.user?.id) {
+  const canonicalUserId = await getCanonicalUserId(session)
+  if (!canonicalUserId) {
     return NextResponse.json(
       apiError('UNAUTHORIZED', 'Authentication required.'),
       { status: 401 },
@@ -65,7 +67,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
   const { formId } = await params
 
   try {
-    const data = await getFormWithSchema(formId, session.user.id)
+    const data = await getFormWithSchema(formId, canonicalUserId)
     return NextResponse.json(apiSuccess(data))
   } catch (err) {
     if (err instanceof ServiceError) {
@@ -83,8 +85,12 @@ export async function GET(_request: Request, { params }: RouteContext) {
 // ─── PUT /api/forms/[formId] ──────────────────────────────────────────────────
 
 export async function PUT(request: Request, { params }: RouteContext) {
+  console.log('[API Forms] Request received')
   const session = await auth()
-  if (!session?.user?.id) {
+  const canonicalUserId = await getCanonicalUserId(session)
+  console.log('[API Forms] User authenticated =', !!canonicalUserId)
+
+  if (!canonicalUserId) {
     return NextResponse.json(
       apiError('UNAUTHORIZED', 'Authentication required.'),
       { status: 401 },
@@ -111,23 +117,28 @@ export async function PUT(request: Request, { params }: RouteContext) {
     const parsed = UpdateDraftBodySchema.safeParse(body)
     if (!parsed.success) {
       const message = parsed.error.errors.map((e) => `${e.path.join('.')}: ${e.message}`).join('; ')
+      console.error('[POST /api/forms] Validation error:', message)
       return NextResponse.json(apiError('VALIDATION_ERROR', message), { status: 400 })
     }
+    console.log('[API Forms] Draft validation passed')
     try {
-      const form = await updateFormDraft(formId, session.user.id, {
+      console.log('[API Forms] DB write started')
+      const form = await updateFormDraft(formId, canonicalUserId, {
         title: parsed.data.title,
         description: parsed.data.description,
         mode: parsed.data.mode,
         encryptionMode: parsed.data.encryptionMode,
         fields: parsed.data.fields as FieldConfig[] | undefined,
       })
+      console.log('[API Forms] DB write success')
       return NextResponse.json(apiSuccess(form))
     } catch (err) {
       if (err instanceof ServiceError) {
+        console.error('[API Forms] DB write failed (ServiceError):', err.code, err.message)
         return NextResponse.json(apiError(err.code, err.message), { status: err.statusCode })
       }
-      console.error(`[PUT /api/forms/${formId}] Draft update error:`, err instanceof Error ? err.message : err)
-      return NextResponse.json(apiError('INTERNAL_ERROR', 'An unexpected error occurred.'), { status: 500 })
+      console.error(`[API Forms] DB write failed:`, err instanceof Error ? err.stack : err)
+      return NextResponse.json(apiError('INTERNAL_ERROR', err instanceof Error ? err.message : 'An unexpected error occurred during database write.'), { status: 500 })
     }
   }
 
@@ -141,18 +152,23 @@ export async function PUT(request: Request, { params }: RouteContext) {
     })
   }
 
+  console.log('[API Forms] Draft validation passed')
+
   try {
-    const form = await updateForm(formId, session.user.id, parsed.data)
+    console.log('[API Forms] DB write started')
+    const form = await updateForm(formId, canonicalUserId, parsed.data)
+    console.log('[API Forms] DB write success')
     return NextResponse.json(apiSuccess(form))
   } catch (err) {
     if (err instanceof ServiceError) {
+      console.error('[API Forms] DB write failed (ServiceError):', err.code, err.message)
       return NextResponse.json(apiError(err.code, err.message), {
         status: err.statusCode,
       })
     }
-    console.error(`[API] PUT /api/forms/${formId} unexpected error:`, err)
+    console.error(`[API Forms] DB write failed:`, err instanceof Error ? err.stack : err)
     return NextResponse.json(
-      apiError('INTERNAL_ERROR', 'An unexpected error occurred.'),
+      apiError('INTERNAL_ERROR', err instanceof Error ? err.message : 'An unexpected error occurred during database write.'),
       { status: 500 },
     )
   }
@@ -162,7 +178,8 @@ export async function PUT(request: Request, { params }: RouteContext) {
 
 export async function DELETE(_request: Request, { params }: RouteContext) {
   const session = await auth()
-  if (!session?.user?.id) {
+  const canonicalUserId = await getCanonicalUserId(session)
+  if (!canonicalUserId) {
     return NextResponse.json(
       apiError('UNAUTHORIZED', 'Authentication required.'),
       { status: 401 },
@@ -170,7 +187,7 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
   }
 
   // DELETE is owner-only (Engineering Rule 15, R16)
-  if (session.user.role !== 'owner') {
+  if (session?.user?.role !== 'owner') {
     return NextResponse.json(
       apiError('FORBIDDEN', 'Only the workspace owner can delete forms.'),
       { status: 403 },
@@ -180,7 +197,7 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
   const { formId } = await params
 
   try {
-    await deleteForm(formId, session.user.id)
+    await deleteForm(formId, canonicalUserId)
     return NextResponse.json(apiSuccess({ deleted: true }))
   } catch (err) {
     if (err instanceof ServiceError) {

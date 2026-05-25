@@ -54,6 +54,8 @@ export function useAutosave(): void {
   const title = useFormBuilderStore((s) => s.title);
   const draftFormId = useFormBuilderStore((s) => s.draftFormId);
   const setAutosaveStatus = useFormBuilderStore((s) => s.setAutosaveStatus);
+  const setSyncStatus = useFormBuilderStore((s) => s.setSyncStatus);
+  const incrementDraftVersion = useFormBuilderStore((s) => s.incrementDraftVersion);
   const recordDraftSave = useDraftSessionStore((s) => s.recordDraftSave);
 
   // Stable ref for draftFormId to avoid re-triggering the effect on ID change
@@ -67,15 +69,28 @@ export function useAutosave(): void {
   // Skip first render
   const isInitialMount = useRef(true);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sequenceRef = useRef<number>(0);
 
   const doAutosave = useCallback(
-    async (currentTitle: string, currentFields: PocField[]) => {
+    async (currentTitle: string, currentFields: PocField[], currentSequence: number) => {
+      const nextVersion = useFormBuilderStore.getState().draftVersion;
+
       // 1. Always write to localStorage (instant, offline-safe)
       try {
         localStorage.setItem(
           DRAFT_KEY,
-          JSON.stringify({ title: currentTitle, fields: currentFields, savedAt: new Date().toISOString() }),
+          JSON.stringify({
+            title: currentTitle,
+            fields: currentFields,
+            savedAt: new Date().toISOString(),
+            version: 1,
+            draftVersion: nextVersion,
+            syncStatus: draftFormIdRef.current ? 'syncing' : 'local-only',
+          }),
         );
+        if (currentSequence === sequenceRef.current) {
+          setSyncStatus(draftFormIdRef.current ? 'syncing' : 'local-only', new Date().toISOString());
+        }
       } catch {
         // Quota exceeded — ignore
       }
@@ -84,7 +99,9 @@ export function useAutosave(): void {
       const formId = draftFormIdRef.current;
       if (!formId) {
         // No DB record yet — localStorage is the only fallback until explicit save
-        setAutosaveStatus('saved');
+        if (currentSequence === sequenceRef.current) {
+          setAutosaveStatus('saved');
+        }
         return;
       }
 
@@ -101,22 +118,48 @@ export function useAutosave(): void {
           }),
         });
 
+        // Verify sequence is still current
+        if (currentSequence !== sequenceRef.current) {
+          return;
+        }
+
         if (response.ok) {
           // Keep session store in sync with the latest title
           recordDraftSaveRef.current(formId, currentTitle || 'Untitled Form');
+          setSyncStatus('synced', new Date().toISOString());
           setAutosaveStatus('saved');
+
+          // Update local storage to synced status
+          try {
+            localStorage.setItem(
+              DRAFT_KEY,
+              JSON.stringify({
+                title: currentTitle,
+                fields: currentFields,
+                savedAt: new Date().toISOString(),
+                version: 1,
+                draftVersion: nextVersion,
+                syncStatus: 'synced',
+              }),
+            );
+          } catch {}
         } else if (response.status === 401) {
           // Session expired — still saved locally
+          setSyncStatus('local-only');
           setAutosaveStatus('saved');
         } else {
+          setSyncStatus('sync-failed');
           setAutosaveStatus('error');
         }
       } catch {
         // Network error — localStorage succeeded
-        setAutosaveStatus('error');
+        if (currentSequence === sequenceRef.current) {
+          setSyncStatus('sync-failed');
+          setAutosaveStatus('error');
+        }
       }
     },
-    [setAutosaveStatus],
+    [setAutosaveStatus, setSyncStatus, recordDraftSaveRef],
   );
 
   useEffect(() => {
@@ -126,6 +169,7 @@ export function useAutosave(): void {
     }
 
     setAutosaveStatus('saving');
+    setSyncStatus('syncing');
 
     if (timerRef.current) clearTimeout(timerRef.current);
 
@@ -134,13 +178,44 @@ export function useAutosave(): void {
     const capturedFields = fields;
 
     timerRef.current = setTimeout(() => {
-      doAutosave(capturedTitle, capturedFields).catch(() => {
-        setAutosaveStatus('error');
+      incrementDraftVersion();
+      const currentSequence = ++sequenceRef.current;
+
+      doAutosave(capturedTitle, capturedFields, currentSequence).catch(() => {
+        if (currentSequence === sequenceRef.current) {
+          setAutosaveStatus('error');
+          setSyncStatus('sync-failed');
+        }
       });
     }, DEBOUNCE_MS);
 
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [fields, title, setAutosaveStatus, doAutosave]);
+  }, [fields, title, setAutosaveStatus, setSyncStatus, incrementDraftVersion, doAutosave]);
+
+  // Auto-retry when connection comes back online
+  useEffect(() => {
+    function handleOnline() {
+      const formId = draftFormIdRef.current;
+      const status = useFormBuilderStore.getState().syncStatus;
+      if (formId && status === 'sync-failed') {
+        console.log('[Autosave] Browser online, triggering auto-retry sync...');
+        setAutosaveStatus('saving');
+        setSyncStatus('syncing');
+        const currentSequence = ++sequenceRef.current;
+        doAutosave(title, fields, currentSequence).catch(() => {
+          if (currentSequence === sequenceRef.current) {
+            setAutosaveStatus('error');
+            setSyncStatus('sync-failed');
+          }
+        });
+      }
+    }
+
+    window.addEventListener('online', handleOnline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [fields, title, doAutosave, setAutosaveStatus, setSyncStatus]);
 }

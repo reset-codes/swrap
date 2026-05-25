@@ -69,6 +69,10 @@ vi.mock('../services/walrus-service', () => ({
     blobId: `mock-blob-${Date.now()}`,
     sizeBytes: bytes.length,
   })),
+  walrusPutWithCliFallback: vi.fn(async (bytes: Uint8Array) => ({
+    blobId: `mock-blob-${Date.now()}`,
+    sizeBytes: bytes.length,
+  })),
   walrusGet: vi.fn(async (_blobId: string) => {
     walrusGetCallCount++;
     return new Uint8Array([0x01, 0x68, 0x65, 0x6c, 0x6c, 0x6f]);

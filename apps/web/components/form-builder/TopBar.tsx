@@ -21,6 +21,8 @@ import { Button } from '../ui/Button';
 import { ThemeSelector } from './ThemeSelector';
 import { toast } from '../ui/Toast';
 
+import { useFormBuilderStore } from '../../stores/form-builder-store';
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -57,10 +59,12 @@ export interface TopBarProps {
 
 interface AutosaveBadgeProps {
   status: AutosaveStatus;
+  syncStatus?: 'local-only' | 'syncing' | 'synced' | 'sync-failed';
   isGuest?: boolean;
+  onRetry?: () => void;
 }
 
-function AutosaveBadge({ status, isGuest }: AutosaveBadgeProps) {
+function AutosaveBadge({ status, syncStatus, isGuest, onRetry }: AutosaveBadgeProps) {
   if (isGuest) {
     return (
       <div className="flex items-center gap-2 rounded-full bg-amber-50 dark:bg-amber-900/20 px-3 py-1 border border-amber-200 dark:border-amber-800">
@@ -70,7 +74,84 @@ function AutosaveBadge({ status, isGuest }: AutosaveBadgeProps) {
     );
   }
 
-  // idle → render nothing (hidden per spec)
+  // 1. Prefer syncStatus display if available
+  if (syncStatus === 'syncing') {
+    return (
+      <div
+        className="flex items-center gap-1.5 text-text-tertiary"
+        aria-live="polite"
+        aria-label="Saving changes"
+        role="status"
+      >
+        <span
+          className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-text-tertiary"
+          aria-hidden="true"
+        />
+        <span className="text-token-sm">Saving…</span>
+      </div>
+    );
+  }
+
+  if (syncStatus === 'sync-failed') {
+    return (
+      <div
+        className="flex items-center gap-1.5 text-red-500"
+        aria-live="assertive"
+        aria-label="Save failed"
+        role="alert"
+      >
+        <span
+          className="inline-block h-1.5 w-1.5 rounded-full bg-red-500"
+          aria-hidden="true"
+        />
+        <span className="text-token-sm">Save failed — Saved locally</span>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="ml-1 text-token-xs font-semibold text-blue-500 hover:text-blue-600 underline focus:outline-none"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (syncStatus === 'local-only') {
+    return (
+      <div
+        className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400"
+        aria-live="polite"
+        aria-label="Saved locally"
+        role="status"
+      >
+        <span
+          className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500"
+          aria-hidden="true"
+        />
+        <span className="text-token-sm">Saved locally</span>
+      </div>
+    );
+  }
+
+  if (syncStatus === 'synced') {
+    return (
+      <div
+        className="flex items-center gap-1.5 text-text-tertiary"
+        aria-live="polite"
+        aria-label="All changes saved"
+        role="status"
+      >
+        <Check
+          className="h-3.5 w-3.5 shrink-0"
+          aria-hidden="true"
+          strokeWidth={2.5}
+        />
+        <span className="text-token-sm">Saved</span>
+      </div>
+    );
+  }
+
+  // 2. Fall back to autosaveStatus if syncStatus is not set
   if (status === 'idle') {
     return <div className="w-40" aria-hidden="true" />;
   }
@@ -83,7 +164,6 @@ function AutosaveBadge({ status, isGuest }: AutosaveBadgeProps) {
         aria-label="Saving changes"
         role="status"
       >
-        {/* Pulsing dot */}
         <span
           className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-text-tertiary"
           aria-hidden="true"
@@ -106,6 +186,13 @@ function AutosaveBadge({ status, isGuest }: AutosaveBadgeProps) {
           aria-hidden="true"
         />
         <span className="text-token-sm">Save failed</span>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="ml-1 text-token-xs font-semibold text-blue-500 hover:text-blue-600 underline focus:outline-none"
+        >
+          Retry
+        </button>
       </div>
     );
   }
@@ -146,6 +233,7 @@ export function TopBar({
   // autosaveStatus — prefer externally-controlled value (from store)
   const [localAutosaveStatus] = React.useState<AutosaveStatus>('idle');
   const autosaveStatus = externalAutosaveStatus ?? localAutosaveStatus;
+  const syncStatus = useFormBuilderStore((s) => s.syncStatus);
 
   function handleTitleChange(e: React.ChangeEvent<HTMLInputElement>) {
     onTitleChange?.(e.target.value);
@@ -203,7 +291,7 @@ export function TopBar({
         >
           <ArrowLeft className="h-4 w-4" aria-hidden="true" />
         </button>
-
+ 
         <input
           type="text"
           value={title}
@@ -225,10 +313,15 @@ export function TopBar({
           maxLength={200}
         />
       </div>
-
+ 
       {/* ── Center: autosave status ────────────────────────────────── */}
       <div className="flex shrink-0 items-center justify-center px-6">
-        <AutosaveBadge status={autosaveStatus} isGuest={isGuest} />
+        <AutosaveBadge
+          status={autosaveStatus}
+          syncStatus={syncStatus}
+          isGuest={isGuest}
+          onRetry={handleSaveDraft}
+        />
       </div>
 
       {/* ── Right: actions ─────────────────────────────────────────── */}
