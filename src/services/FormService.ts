@@ -772,6 +772,7 @@ export async function updateForm(
 export async function publishForm(
   formId: string,
   adminId: string,
+  idempotencyKey?: string | null,
 ): Promise<{ publicUrl: string; slug: string }> {
   const form = await prisma.form.findUnique({ where: { id: formId } })
   if (!form) {
@@ -781,36 +782,91 @@ export async function publishForm(
     throw new ServiceError('You do not have permission to publish this form.', 'FORBIDDEN', 403)
   }
 
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://swrap.app'
+
+  // If already published, return immediately
+  if (form.isPublished && form.schemaBlobId) {
+    return { publicUrl: `${appUrl}/f/${form.slug}`, slug: form.slug }
+  }
+
+  // If there's an active idempotency key match that is already published
+  if (idempotencyKey) {
+    const existingPublished = await prisma.form.findFirst({
+      where: { id: formId, idempotencyKey, isPublished: true },
+    })
+    if (existingPublished && existingPublished.schemaBlobId) {
+      return { publicUrl: `${appUrl}/f/${existingPublished.slug}`, slug: existingPublished.slug }
+    }
+  }
+
+  // ── Step 1: Validating State ───────────────────────────────────────────────
+  await prisma.form.update({
+    where: { id: formId },
+    data: { publishStatus: 'validating', idempotencyKey: idempotencyKey || null },
+  })
+
+  const draftSchema = form.draftSchema as FormSchema | null
+  if (!draftSchema) {
+    await prisma.form.update({
+      where: { id: formId },
+      data: { publishStatus: 'draft' },
+    })
+    throw new ServiceError(
+      'This form has no content to publish. Please add fields and save first.',
+      'SCHEMA_MISSING',
+      400,
+    )
+  }
+
+  // ── Step 2: Queued State ───────────────────────────────────────────────────
+  await prisma.form.update({
+    where: { id: formId },
+    data: { publishStatus: 'queued' },
+  })
+
+  // ── Step 3: Uploading State ────────────────────────────────────────────────
+  await prisma.form.update({
+    where: { id: formId },
+    data: { publishStatus: 'uploading_to_walrus' },
+  })
+
   let blobId = form.schemaBlobId
+  let walrusWriteOk = false
 
-  if (!blobId) {
-    // Draft path: write schema to Walrus using infra wallet
-    const draftSchema = form.draftSchema as FormSchema | null
-
-    if (!draftSchema) {
+  if (blobId) {
+    // Already has schemaBlobId, just mark published under advisory lock
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${formId}))`
+        await tx.form.update({
+          where: { id: formId },
+          data: {
+            isPublished: true,
+            publishedAt: new Date(),
+            publishStatus: 'published',
+          },
+        })
+      })
+    } catch (dbErr) {
+      console.error('[FormService.publishForm] DB publish update failed:', dbErr)
       throw new ServiceError(
-        'This form has no content to publish. Please add fields and save first.',
-        'SCHEMA_MISSING',
-        400,
+        'Failed to mark form as published. Please try again.',
+        'INDEXING_FAILED',
+        500,
       )
     }
-
-    // Ensure the schema title is current
+  } else {
+    // Assemble the complete schema to publish
     const schemaToPublish: FormSchema = {
       ...draftSchema,
       title: form.title,
       description: form.description ?? undefined,
       updatedAt: new Date().toISOString(),
-      // Normalize canvas field types → API FieldType at publish time.
-      // This is a safety net: after import, fields may have canvas types
-      // (text, select, textarea) if the user publishes without saving first.
-      // After a builder save, types are already API-normalized.
       fields: draftSchema.fields.map((f, index) => ({
         ...f,
         id: f.id || crypto.randomUUID(),
         order: f.order ?? index,
         type: normalizeFieldType(f.type),
-        // options stored as string[] (canvas) → convert to FieldOption[] for Walrus schema
         options: Array.isArray(f.options) && f.options.length > 0
           ? f.options.map((opt: unknown, i: number) => {
               if (typeof opt === 'string') {
@@ -824,14 +880,22 @@ export async function publishForm(
 
     const jsonString = JSON.stringify(schemaToPublish)
 
-    // Write to Walrus — infra wallet sponsors the write.
-    // Fallback chain:
-    //   1. HTTP publisher via executeWalrusWrite (primary path)
-    //   2. Walrus CLI on the server (WALRUS_CLI_PATH must be set)
-    //   3. Dev-mode placeholder (DEV_BYPASS_STORAGE=true or NOT_CONFIGURED in dev)
-    const schemaBuffer = Buffer.from(jsonString, 'utf-8')
+    // Check credits before writing to Walrus (Engineering Rule 5)
+    const cost = estimateCost(jsonString)
+    const hasSufficientCredits = await checkSufficient(adminId, cost)
+    if (!hasSufficientCredits) {
+      await prisma.form.update({
+        where: { id: formId },
+        data: { publishStatus: 'publish_failed' },
+      })
+      throw new ServiceError(
+        'Insufficient storage credits. Please deposit more credits before publishing.',
+        'INSUFFICIENT_CREDITS',
+        402,
+      )
+    }
 
-    let walrusWriteOk = false
+    const schemaBuffer = Buffer.from(jsonString, 'utf-8')
 
     // ── Primary: HTTP publisher ───────────────────────────────────────────
     try {
@@ -875,7 +939,11 @@ export async function publishForm(
       }
     }
 
-    if (!walrusWriteOk) {
+    if (!walrusWriteOk || !blobId) {
+      await prisma.form.update({
+        where: { id: formId },
+        data: { publishStatus: 'publish_failed' },
+      })
       throw new ServiceError(
         'Failed to store form on Walrus. Please try again.',
         'WALRUS_WRITE_FAILED',
@@ -883,35 +951,75 @@ export async function publishForm(
       )
     }
 
-    // Create BlobReference for the new blob
+    // ── Step 4: Walrus Uploaded State ────────────────────────────────────────
+    await prisma.form.update({
+      where: { id: formId },
+      data: { publishStatus: 'walrus_uploaded' },
+    })
+
+    // ── Step 5: Indexing State inside PostgreSQL advisory locked transaction ──
     try {
-      await prisma.blobReference.create({
-        data: {
-          walrusBlobId: blobId!, // non-null: guaranteed by walrusWriteOk guard above
-          blobType: 'form_schema',
-          sizeBytes: Buffer.byteLength(jsonString, 'utf-8'),
-          formId: form.id,
-        },
+      await prisma.$transaction(async (tx) => {
+        // Acquire transaction-level advisory lock
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${formId}))`
+
+        // Set to indexing
+        await tx.form.update({
+          where: { id: formId },
+          data: { publishStatus: 'indexing' },
+        })
+
+        // Create BlobReference
+        await tx.blobReference.create({
+          data: {
+            walrusBlobId: blobId!,
+            blobType: 'form_schema',
+            sizeBytes: Buffer.byteLength(jsonString, 'utf-8'),
+            formId,
+          },
+        })
+
+        // Update form to published
+        await tx.form.update({
+          where: { id: formId },
+          data: {
+            isPublished: true,
+            publishedAt: new Date(),
+            schemaBlobId: blobId,
+            publishStatus: 'published',
+          },
+        })
       })
-    } catch {
-      // BlobReference creation is best-effort — don't fail publish
+
+      // ── Step 6: Deduct Credits ─────────────────────────────────────────────
+      try {
+        await deduct(adminId, cost, blobId)
+      } catch (deductErr) {
+        console.error(`[FormService] Credit deduction failed:`, deductErr)
+      }
+
+    } catch (dbErr) {
+      console.error('[FormService.publishForm] DB indexing failed, triggering rollback:', dbErr)
+      
+      // Rollback status to publish_failed
+      await prisma.form.update({
+        where: { id: formId },
+        data: { publishStatus: 'publish_failed' },
+      })
+
+      throw new ServiceError(
+        'Database indexing failed during publish. Please try again.',
+        'INDEXING_FAILED',
+        500,
+      )
     }
   }
 
-  // Mark as published with the blob ID
-  const published = await prisma.form.update({
-    where: { id: formId },
-    data: {
-      isPublished: true,
-      publishedAt: new Date(),
-      schemaBlobId: blobId,
-    },
-  })
+  const publishedForm = await prisma.form.findUnique({ where: { id: formId } })
+  const finalSlug = publishedForm?.slug || form.slug
+  const publicUrl = `${appUrl}/f/${finalSlug}`
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://swrap.app'
-  const publicUrl = `${appUrl}/f/${published.slug}`
-
-  return { publicUrl, slug: published.slug }
+  return { publicUrl, slug: finalSlug }
 }
 
 /**

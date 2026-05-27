@@ -68,12 +68,12 @@ async function post(path: string, body: unknown, headers: Record<string, string>
     headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body),
   });
-  return { status: res.status, body: (await res.json()) as ApiResponse<FileRow> };
+  return { status: res.status, body: (await res.json()) as any };
 }
 
 async function get(path: string, headers: Record<string, string> = {}) {
   const res = await fetch(`${baseUrl}${path}`, { headers });
-  return { status: res.status, body: (await res.json()) as ApiResponse<FileRow> };
+  return { status: res.status, body: (await res.json()) as any };
 }
 
 // ---------------------------------------------------------------------------
@@ -81,7 +81,7 @@ async function get(path: string, headers: Record<string, string> = {}) {
 // ---------------------------------------------------------------------------
 
 describe('POST /files', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     _stubClear();
     _stubSeedSubmission(VALID_SUBMISSION_ID);
   });
@@ -203,7 +203,7 @@ describe('POST /files', () => {
 });
 
 describe('GET /files/:id', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     _stubClear();
     _stubSeedSubmission(VALID_SUBMISSION_ID);
   });

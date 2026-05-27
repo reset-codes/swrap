@@ -170,8 +170,8 @@ const VALID_POLICY_ID = 'seal-policy-abc123';
 // Setup / teardown
 // ---------------------------------------------------------------------------
 
-beforeEach(() => {
-  _resetFormStore();
+beforeEach(async () => {
+  await _resetFormStore();
   vi.mocked(walrusPut).mockClear();
   vi.mocked(walrusBlobExists).mockClear();
   vi.mocked(sealEncrypt).mockClear();
@@ -194,8 +194,8 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => {
-  _resetFormStore();
+afterEach(async () => {
+  await _resetFormStore();
 });
 
 // ---------------------------------------------------------------------------

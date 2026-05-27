@@ -137,11 +137,11 @@ export class DecryptionSystemError extends Error {
  * @throws PublicSubmissionError if the submission is public
  * @throws MissingPolicyIdError if the submission is private but has no policy ID
  */
-function validateSubmissionForDecryption(
+async function validateSubmissionForDecryption(
   submissionId: string,
   db: AuthDb,
-): SubmissionRecord {
-  const submission = db.getSubmission(submissionId);
+): Promise<SubmissionRecord> {
+  const submission = await db.getSubmission(submissionId);
 
   if (!submission) {
     throw new SubmissionNotFoundError(submissionId);
@@ -210,7 +210,7 @@ export async function authorizedDecrypt(
   // Step 1: Look up and validate submission for decryption
   let submission: SubmissionRecord;
   try {
-    submission = validateSubmissionForDecryption(submissionId, db);
+    submission = await validateSubmissionForDecryption(submissionId, db);
   } catch (err) {
     // If submission not found or invalid, write audit entry before throwing
     const reason =

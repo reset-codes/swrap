@@ -176,7 +176,7 @@ const suiAddressArb: fc.Arbitrary<string> = fc
 const ORIGINAL_WALLET_SECRET = process.env.INFRASTRUCTURE_WALLET_SECRET;
 const ORIGINAL_PACKAGE_ID = process.env.SUI_POC_PACKAGE_ID;
 
-beforeEach(() => {
+beforeEach(async () => {
   setEnv('INFRASTRUCTURE_WALLET_SECRET', TEST_SECRET_BECH32);
   setEnv('SUI_POC_PACKAGE_ID', '0x' + '12'.repeat(32));
   lastEncryptedPolicyId = null;
@@ -184,7 +184,7 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-afterEach(() => {
+afterEach(async () => {
   setEnv('INFRASTRUCTURE_WALLET_SECRET', ORIGINAL_WALLET_SECRET);
   setEnv('SUI_POC_PACKAGE_ID', ORIGINAL_PACKAGE_ID);
 });

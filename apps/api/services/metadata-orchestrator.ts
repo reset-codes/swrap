@@ -78,35 +78,35 @@ export type ArtifactKind = 'form' | 'submission' | 'file';
  */
 export interface Db {
   /** Look up a form record by ID. */
-  getForm(formId: string): FormRecord | undefined;
+  getForm(formId: string): Promise<FormRecord | undefined>;
   /** Insert a new form record. Returns the inserted record. */
-  insertForm(row: FormRecord): FormRecord;
+  insertForm(row: FormRecord): Promise<FormRecord>;
   /** Look up a submission record by ID. */
-  getSubmission(submissionId: string): SubmissionRecord | undefined;
+  getSubmission(submissionId: string): Promise<SubmissionRecord | undefined>;
   /** Insert a new submission record. Returns the inserted record. */
-  insertSubmission(row: SubmissionRecord): SubmissionRecord;
+  insertSubmission(row: SubmissionRecord): Promise<SubmissionRecord>;
   /** Look up a file record by ID. */
-  getFile(fileId: string): FileRecord | undefined;
+  getFile(fileId: string): Promise<FileRecord | undefined>;
   /** Insert a new file record. Returns the inserted record. */
-  insertFile(row: FileRecord): FileRecord;
+  insertFile(row: FileRecord): Promise<FileRecord>;
   /** Insert a new upload job record. Returns the inserted record. */
-  insertUploadJob(row: UploadJobRecord): UploadJobRecord;
+  insertUploadJob(row: UploadJobRecord): Promise<UploadJobRecord>;
   /** Update an upload job's state and optional failure reason. */
   updateUploadJobState(
     jobId: string,
     state: UploadState,
     failureReason?: string,
-  ): void;
+  ): Promise<void>;
   /**
    * Find an existing form by (ownerAddress, walrusBlobId) for idempotent
    * reconcile. Returns undefined if not found.
    */
-  findFormByBlob(ownerAddress: string, walrusBlobId: string): FormRecord | undefined;
+  findFormByBlob(ownerAddress: string, walrusBlobId: string): Promise<FormRecord | undefined>;
   /**
    * Find an existing submission by (formId, walrusBlobId) for idempotent
    * reconcile. Returns undefined if not found.
    */
-  findSubmissionByBlob(formId: string, walrusBlobId: string): SubmissionRecord | undefined;
+  findSubmissionByBlob(formId: string, walrusBlobId: string): Promise<SubmissionRecord | undefined>;
 }
 
 // ---------------------------------------------------------------------------
@@ -370,11 +370,11 @@ function toUtf8Bytes(s: string): Uint8Array {
 /**
  * Create a new upload job record in `pending` state.
  */
-function createUploadJob(
+async function createUploadJob(
   ownerAddress: string,
   artifactKind: ArtifactKind,
   db: Db,
-): UploadJobRecord {
+): Promise<UploadJobRecord> {
   const now = new Date().toISOString();
   const job: UploadJobRecord = {
     id: crypto.randomUUID(),
@@ -387,20 +387,20 @@ function createUploadJob(
     createdAt: now,
     updatedAt: now,
   };
-  return db.insertUploadJob(job);
+  return await db.insertUploadJob(job);
 }
 
 /**
  * Transition an upload job to a new state.
  * Logs the transition at debug level (no sensitive data).
  */
-function transitionJob(
+async function transitionJob(
   jobId: string,
   to: UploadState,
   db: Db,
   failureReason?: string,
-): void {
-  db.updateUploadJobState(jobId, to, failureReason);
+): Promise<void> {
+  await db.updateUploadJobState(jobId, to, failureReason);
 }
 
 /**
@@ -465,7 +465,7 @@ export async function orchestrateFormCreate(
   const now = new Date().toISOString();
 
   // Step 1: Create upload job (pending) — Requirement 6.2
-  const job = createUploadJob(actorAddress, 'form', db);
+  const job = await createUploadJob(actorAddress, 'form', db);
   const jobId = job.id;
 
   let walrusBlobId: string;
@@ -481,7 +481,7 @@ export async function orchestrateFormCreate(
     if (req.privacyMode === 'private') {
       // Step 3a: Private — transition to encrypting, encrypt, transition to uploading
       // Requirement 6.3: transition to encrypting before Seal call
-      transitionJob(jobId, 'encrypting', db);
+      await transitionJob(jobId, 'encrypting', db);
 
       const ownerAddress = req.policyId ?? actorAddress;
 
@@ -493,7 +493,7 @@ export async function orchestrateFormCreate(
         plaintextBytes = new Uint8Array(0);
       } catch (encErr) {
         // Requirement 6.10: transition to failed on error
-        transitionJob(jobId, 'failed', db, `Seal encryption failed: ${encErr instanceof Error ? encErr.message : String(encErr)}`);
+        await transitionJob(jobId, 'failed', db, `Seal encryption failed: ${encErr instanceof Error ? encErr.message : String(encErr)}`);
         await tryWriteAudit({
           requestId,
           actorAddress,
@@ -517,14 +517,14 @@ export async function orchestrateFormCreate(
       contentDigest = encryptResult.digest;
 
       // Transition to uploading — Requirement 6.5
-      transitionJob(jobId, 'uploading', db);
+      await transitionJob(jobId, 'uploading', db);
 
       // Step 4: Upload ciphertext to Walrus
       let putResult: { blobId: string; sizeBytes: number };
       try {
         putResult = await walrusPutWithCliFallback(encryptResult.ciphertext);
       } catch (putErr) {
-        transitionJob(jobId, 'failed', db, `Walrus PUT failed: ${putErr instanceof Error ? putErr.message : String(putErr)}`);
+        await transitionJob(jobId, 'failed', db, `Walrus PUT failed: ${putErr instanceof Error ? putErr.message : String(putErr)}`);
         await tryWriteAudit({
           requestId,
           actorAddress,
@@ -546,7 +546,7 @@ export async function orchestrateFormCreate(
     } else {
       // Step 3b: Public — transition directly to uploading
       // Requirement 6.4: pending → uploading for public forms
-      transitionJob(jobId, 'uploading', db);
+      await transitionJob(jobId, 'uploading', db);
 
       contentDigest = sha256Hex(plaintextBytes);
 
@@ -557,7 +557,7 @@ export async function orchestrateFormCreate(
         // Release plaintext reference after upload
         plaintextBytes = new Uint8Array(0);
       } catch (putErr) {
-        transitionJob(jobId, 'failed', db, `Walrus PUT failed: ${putErr instanceof Error ? putErr.message : String(putErr)}`);
+        await transitionJob(jobId, 'failed', db, `Walrus PUT failed: ${putErr instanceof Error ? putErr.message : String(putErr)}`);
         await tryWriteAudit({
           requestId,
           actorAddress,
@@ -579,12 +579,12 @@ export async function orchestrateFormCreate(
     }
 
     // Step 5: Transition to uploaded — Requirement 6.6
-    transitionJob(jobId, 'uploaded', db);
+    await transitionJob(jobId, 'uploaded', db);
 
     // Check for idempotent reconcile — if same blob already indexed, return it
-    const existing = db.findFormByBlob(actorAddress, walrusBlobId);
+    const existing = await db.findFormByBlob(actorAddress, walrusBlobId);
     if (existing) {
-      transitionJob(jobId, 'indexed', db);
+      await transitionJob(jobId, 'indexed', db);
       return {
         formId: existing.id,
         walrusBlobId: existing.walrusBlobId,
@@ -603,7 +603,7 @@ export async function orchestrateFormCreate(
     try {
       blobExists = await walrusBlobExists(walrusBlobId);
     } catch (existsErr) {
-      transitionJob(jobId, 'failed', db, `Walrus existence check failed: ${existsErr instanceof Error ? existsErr.message : String(existsErr)}`);
+      await transitionJob(jobId, 'failed', db, `Walrus existence check failed: ${existsErr instanceof Error ? existsErr.message : String(existsErr)}`);
       await tryWriteAudit({
         requestId,
         actorAddress,
@@ -621,7 +621,7 @@ export async function orchestrateFormCreate(
     }
 
     if (!blobExists) {
-      transitionJob(jobId, 'failed', db, `Blob ${walrusBlobId} not found on Walrus after PUT`);
+      await transitionJob(jobId, 'failed', db, `Blob ${walrusBlobId} not found on Walrus after PUT`);
       await tryWriteAudit({
         requestId,
         actorAddress,
@@ -653,10 +653,10 @@ export async function orchestrateFormCreate(
       createdAt: now,
     };
 
-    db.insertForm(formRow);
+    await db.insertForm(formRow);
 
     // Step 8: Transition job to indexed
-    transitionJob(jobId, 'indexed', db);
+    await transitionJob(jobId, 'indexed', db);
 
     // Step 9: Write audit entry
     await tryWriteAudit({
@@ -703,7 +703,7 @@ export async function orchestrateFormCreate(
     // If the job is not already in failed state, transition it now
     // (handles unexpected errors not caught in the inner try blocks)
     try {
-      transitionJob(jobId, 'failed', db, err instanceof Error ? err.message : String(err));
+      await transitionJob(jobId, 'failed', db, err instanceof Error ? err.message : String(err));
     } catch {
       // Ignore secondary failure — the primary error is more important
     }
@@ -748,7 +748,7 @@ export async function orchestrateSubmissionCreate(
   const now = new Date().toISOString();
 
   // Step 1: Create upload job (pending) — Requirement 6.2
-  const job = createUploadJob(actorAddress, 'submission', db);
+  const job = await createUploadJob(actorAddress, 'submission', db);
   const jobId = job.id;
 
   let walrusBlobId: string;
@@ -758,9 +758,9 @@ export async function orchestrateSubmissionCreate(
 
   try {
     // Step 2: Look up parent form and validate privacy mode — Requirement 4.5
-    const form = db.getForm(req.formId);
+    const form = await db.getForm(req.formId);
     if (!form) {
-      transitionJob(jobId, 'failed', db, `Form ${req.formId} not found`);
+      await transitionJob(jobId, 'failed', db, `Form ${req.formId} not found`);
       await tryWriteAudit({
         requestId,
         actorAddress,
@@ -779,7 +779,7 @@ export async function orchestrateSubmissionCreate(
 
     // Privacy mode mismatch check — Requirement 4.5
     if (req.privacyMode !== form.privacyMode) {
-      transitionJob(jobId, 'failed', db, `Privacy mode mismatch: declared ${req.privacyMode}, form has ${form.privacyMode}`);
+      await transitionJob(jobId, 'failed', db, `Privacy mode mismatch: declared ${req.privacyMode}, form has ${form.privacyMode}`);
       await tryWriteAudit({
         requestId,
         actorAddress,
@@ -808,7 +808,7 @@ export async function orchestrateSubmissionCreate(
       // Step 4a: Private — transition to encrypting, encrypt via sealEncrypt
       // using the form owner's address so the policy authorizes the form owner.
       // Requirement 6.3: transition to encrypting before Seal call
-      transitionJob(jobId, 'encrypting', db);
+      await transitionJob(jobId, 'encrypting', db);
 
       let encryptResult: { ciphertext: Uint8Array; policyId: string; digest: string };
       try {
@@ -818,7 +818,7 @@ export async function orchestrateSubmissionCreate(
         // Drop our local reference too
         plaintextBytes = new Uint8Array(0);
       } catch (encErr) {
-        transitionJob(jobId, 'failed', db, `Seal encryption failed: ${encErr instanceof Error ? encErr.message : String(encErr)}`);
+        await transitionJob(jobId, 'failed', db, `Seal encryption failed: ${encErr instanceof Error ? encErr.message : String(encErr)}`);
         await tryWriteAudit({
           requestId,
           actorAddress,
@@ -842,14 +842,14 @@ export async function orchestrateSubmissionCreate(
       contentDigest = encryptResult.digest;
 
       // Transition to uploading — Requirement 6.5
-      transitionJob(jobId, 'uploading', db);
+      await transitionJob(jobId, 'uploading', db);
 
       // Step 5: Upload ciphertext to Walrus
       let putResult: { blobId: string; sizeBytes: number };
       try {
         putResult = await walrusPutWithCliFallback(encryptResult.ciphertext);
       } catch (putErr) {
-        transitionJob(jobId, 'failed', db, `Walrus PUT failed: ${putErr instanceof Error ? putErr.message : String(putErr)}`);
+        await transitionJob(jobId, 'failed', db, `Walrus PUT failed: ${putErr instanceof Error ? putErr.message : String(putErr)}`);
         await tryWriteAudit({
           requestId,
           actorAddress,
@@ -871,7 +871,7 @@ export async function orchestrateSubmissionCreate(
     } else {
       // Step 4b: Public — transition directly to uploading
       // Requirement 6.4: pending → uploading for public forms
-      transitionJob(jobId, 'uploading', db);
+      await transitionJob(jobId, 'uploading', db);
 
       contentDigest = sha256Hex(plaintextBytes);
 
@@ -882,7 +882,7 @@ export async function orchestrateSubmissionCreate(
         // Release plaintext reference after upload
         plaintextBytes = new Uint8Array(0);
       } catch (putErr) {
-        transitionJob(jobId, 'failed', db, `Walrus PUT failed: ${putErr instanceof Error ? putErr.message : String(putErr)}`);
+        await transitionJob(jobId, 'failed', db, `Walrus PUT failed: ${putErr instanceof Error ? putErr.message : String(putErr)}`);
         await tryWriteAudit({
           requestId,
           actorAddress,
@@ -904,12 +904,12 @@ export async function orchestrateSubmissionCreate(
     }
 
     // Step 6: Transition to uploaded — Requirement 6.6
-    transitionJob(jobId, 'uploaded', db);
+    await transitionJob(jobId, 'uploaded', db);
 
     // Check for idempotent reconcile — if same blob already indexed, return it
-    const existing = db.findSubmissionByBlob(req.formId, walrusBlobId);
+    const existing = await db.findSubmissionByBlob(req.formId, walrusBlobId);
     if (existing) {
-      transitionJob(jobId, 'indexed', db);
+      await transitionJob(jobId, 'indexed', db);
       return {
         submissionId: existing.id,
         formId: existing.formId,
@@ -929,7 +929,7 @@ export async function orchestrateSubmissionCreate(
     try {
       blobExists = await walrusBlobExists(walrusBlobId);
     } catch (existsErr) {
-      transitionJob(jobId, 'failed', db, `Walrus existence check failed: ${existsErr instanceof Error ? existsErr.message : String(existsErr)}`);
+      await transitionJob(jobId, 'failed', db, `Walrus existence check failed: ${existsErr instanceof Error ? existsErr.message : String(existsErr)}`);
       await tryWriteAudit({
         requestId,
         actorAddress,
@@ -947,7 +947,7 @@ export async function orchestrateSubmissionCreate(
     }
 
     if (!blobExists) {
-      transitionJob(jobId, 'failed', db, `Blob ${walrusBlobId} not found on Walrus after PUT`);
+      await transitionJob(jobId, 'failed', db, `Blob ${walrusBlobId} not found on Walrus after PUT`);
       await tryWriteAudit({
         requestId,
         actorAddress,
@@ -979,10 +979,10 @@ export async function orchestrateSubmissionCreate(
       createdAt: now,
     };
 
-    db.insertSubmission(submissionRow);
+    await db.insertSubmission(submissionRow);
 
     // Step 9: Transition job to indexed
-    transitionJob(jobId, 'indexed', db);
+    await transitionJob(jobId, 'indexed', db);
 
     // Step 10: Write audit entry
     await tryWriteAudit({
@@ -1030,7 +1030,7 @@ export async function orchestrateSubmissionCreate(
   } catch (err) {
     // Transition to failed for unexpected errors not caught in inner blocks
     try {
-      transitionJob(jobId, 'failed', db, err instanceof Error ? err.message : String(err));
+      await transitionJob(jobId, 'failed', db, err instanceof Error ? err.message : String(err));
     } catch {
       // Ignore secondary failure
     }
@@ -1076,7 +1076,7 @@ export async function orchestrateFileCreate(
   const now = new Date().toISOString();
 
   // Step 1: Create upload job (pending) — Requirement 6.2
-  const job = createUploadJob(actorAddress, 'file', db);
+  const job = await createUploadJob(actorAddress, 'file', db);
   const jobId = job.id;
 
   let walrusBlobId: string;
@@ -1084,9 +1084,9 @@ export async function orchestrateFileCreate(
 
   try {
     // Step 2: Validate parent submission exists
-    const submission = db.getSubmission(req.submissionId);
+    const submission = await db.getSubmission(req.submissionId);
     if (!submission) {
-      transitionJob(jobId, 'failed', db, `Submission ${req.submissionId} not found`);
+      await transitionJob(jobId, 'failed', db, `Submission ${req.submissionId} not found`);
       await tryWriteAudit({
         requestId,
         actorAddress,
@@ -1108,14 +1108,14 @@ export async function orchestrateFileCreate(
     const fileSizeBytes = req.fileBytes.length;
 
     // Step 4: Transition to uploading — Requirement 6.4
-    transitionJob(jobId, 'uploading', db);
+    await transitionJob(jobId, 'uploading', db);
 
     // Step 5: Upload file bytes to Walrus
     let putResult: { blobId: string; sizeBytes: number };
     try {
       putResult = await walrusPutWithCliFallback(req.fileBytes);
     } catch (putErr) {
-      transitionJob(jobId, 'failed', db, `Walrus PUT failed: ${putErr instanceof Error ? putErr.message : String(putErr)}`);
+      await transitionJob(jobId, 'failed', db, `Walrus PUT failed: ${putErr instanceof Error ? putErr.message : String(putErr)}`);
       await tryWriteAudit({
         requestId,
         actorAddress,
@@ -1136,14 +1136,14 @@ export async function orchestrateFileCreate(
     sizeBytes = putResult.sizeBytes;
 
     // Step 6: Transition to uploaded — Requirement 6.6
-    transitionJob(jobId, 'uploaded', db);
+    await transitionJob(jobId, 'uploaded', db);
 
     // Step 7: Verify blob exists on Walrus before indexing — Requirement 7.8
     let blobExists: boolean;
     try {
       blobExists = await walrusBlobExists(walrusBlobId);
     } catch (existsErr) {
-      transitionJob(jobId, 'failed', db, `Walrus existence check failed: ${existsErr instanceof Error ? existsErr.message : String(existsErr)}`);
+      await transitionJob(jobId, 'failed', db, `Walrus existence check failed: ${existsErr instanceof Error ? existsErr.message : String(existsErr)}`);
       await tryWriteAudit({
         requestId,
         actorAddress,
@@ -1161,7 +1161,7 @@ export async function orchestrateFileCreate(
     }
 
     if (!blobExists) {
-      transitionJob(jobId, 'failed', db, `Blob ${walrusBlobId} not found on Walrus after PUT`);
+      await transitionJob(jobId, 'failed', db, `Blob ${walrusBlobId} not found on Walrus after PUT`);
       await tryWriteAudit({
         requestId,
         actorAddress,
@@ -1190,10 +1190,10 @@ export async function orchestrateFileCreate(
       createdAt: now,
     };
 
-    db.insertFile(fileRow);
+    await db.insertFile(fileRow);
 
     // Step 9: Transition job to indexed
-    transitionJob(jobId, 'indexed', db);
+    await transitionJob(jobId, 'indexed', db);
 
     // Step 10: Write audit entry
     await tryWriteAudit({
@@ -1240,7 +1240,7 @@ export async function orchestrateFileCreate(
   } catch (err) {
     // Transition to failed for unexpected errors not caught in inner blocks
     try {
-      transitionJob(jobId, 'failed', db, err instanceof Error ? err.message : String(err));
+      await transitionJob(jobId, 'failed', db, err instanceof Error ? err.message : String(err));
     } catch {
       // Ignore secondary failure
     }

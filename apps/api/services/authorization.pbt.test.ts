@@ -54,7 +54,7 @@ import type { FormRecord, SubmissionRecord } from './metadata-orchestrator';
 // Setup / teardown
 // ---------------------------------------------------------------------------
 
-beforeEach(() => {
+beforeEach(async () => {
   _resetAuditLogStore();
 });
 

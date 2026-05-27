@@ -169,7 +169,7 @@ describe('Property 31a: ok() helper — shape and field values', () => {
   it('Property 31a-iv: ok() result never contains an error field', () => {
     fc.assert(
       fc.property(resultArb, requestIdArb, (result, requestId) => {
-        const envelope = ok(result, requestId) as Record<string, unknown>;
+        const envelope = ok(result, requestId) as any;
         expect('error' in envelope).toBe(false);
       }),
       { numRuns: 50 },
@@ -299,7 +299,7 @@ describe('Property 31b: err() helper — shape and field values', () => {
         errorStatusArb,
         requestIdArb,
         (code, message, status, requestId) => {
-          const envelope = err(code, message, status, requestId) as Record<string, unknown>;
+          const envelope = err(code, message, status, requestId) as any;
           expect('result' in envelope).toBe(false);
         },
       ),
@@ -321,7 +321,7 @@ describe('Property 31c: Discriminated union invariant', () => {
   it('Property 31c-i: ok:true implies result present and error absent', () => {
     fc.assert(
       fc.property(resultArb, requestIdArb, successStatusArb, (result, requestId, status) => {
-        const envelope = ok(result, requestId, status) as Record<string, unknown>;
+        const envelope = ok(result, requestId, status) as any;
 
         expect(envelope.ok).toBe(true);
         expect('result' in envelope).toBe(true);
@@ -344,7 +344,7 @@ describe('Property 31c: Discriminated union invariant', () => {
         errorStatusArb,
         requestIdArb,
         (code, message, status, requestId) => {
-          const envelope = err(code, message, status, requestId) as Record<string, unknown>;
+          const envelope = err(code, message, status, requestId) as any;
 
           expect(envelope.ok).toBe(false);
           expect('error' in envelope).toBe(true);
@@ -371,8 +371,8 @@ describe('Property 31c: Discriminated union invariant', () => {
         requestIdArb,
         (isOk, result, code, message, status, requestId) => {
           const envelope: Record<string, unknown> = isOk
-            ? (ok(result, requestId, status) as Record<string, unknown>)
-            : (err(code, message, status, requestId) as Record<string, unknown>);
+            ? (ok(result, requestId, status) as any)
+            : (err(code, message, status, requestId) as any);
 
           const hasResult = 'result' in envelope;
           const hasError = 'error' in envelope;
@@ -549,7 +549,7 @@ function buildHealthEnvelopeApp(): express.Express {
           : 'missing';
 
       // DB check will fail (no real DB) — that's fine, we just want the shape
-      const dbStatus = 'error' as const;
+      const dbStatus = 'error' as string;
 
       const allOk = dbStatus === 'ok' && infraWalletStatus === 'ok';
       const httpStatus = allOk ? 200 : 503;

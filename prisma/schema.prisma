@@ -84,6 +84,8 @@ model Form {
   sealPolicyId   String?        // Seal policy ID for encrypted forms
   isPublished    Boolean        @default(false)
   publishedAt    DateTime?
+  publishStatus  String?        @default("draft")
+  idempotencyKey String?        @unique
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 
@@ -163,4 +165,122 @@ model CreditTransaction {
   credit StorageCredit @relation(fields: [creditId], references: [id], onDelete: Cascade)
 
   @@map("app_credit_transactions")
+}
+
+// ─── Core Standalone API Models (mapped to raw node-pg-migrate tables) ──────────
+
+model DbUser {
+  address      String   @id
+  signerKind   String   @map("signer_kind")
+  displayName  String?  @map("display_name")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  lastSeenAt   DateTime @default(now()) @map("last_seen_at") @db.Timestamptz
+
+  forms        DbForm[]
+  submissions  DbSubmission[]
+  uploadJobs   DbUploadJob[]
+
+  @@map("users")
+}
+
+model DbForm {
+  id            String   @id @db.Uuid
+  ownerAddress  String   @map("owner_address")
+  walrusBlobId  String   @unique @map("walrus_blob_id")
+  privacyMode   String   @map("privacy_mode")
+  policyId      String?  @map("policy_id")
+  version       Int      @default(1)
+  predecessorId String?  @map("predecessor_id") @db.Uuid
+  state         String
+  contentDigest String?  @map("content_digest")
+  sizeBytes     BigInt?  @default(0) @map("size_bytes")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  owner         DbUser         @relation(fields: [ownerAddress], references: [address])
+  predecessor   DbForm?        @relation("FormVersions", fields: [predecessorId], references: [id])
+  successors    DbForm[]       @relation("FormVersions")
+  submissions   DbSubmission[]
+  permissions   DbPermission[]
+
+  @@map("forms")
+}
+
+model DbSubmission {
+  id               String   @id @db.Uuid
+  formId           String   @map("form_id") @db.Uuid
+  formVersion      Int      @map("form_version")
+  submitterAddress String   @map("submitter_address")
+  walrusBlobId     String   @unique @map("walrus_blob_id")
+  privacyMode      String   @map("privacy_mode")
+  contentDigest    String   @map("content_digest")
+  sizeBytes        BigInt   @map("size_bytes")
+  state            String
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  form             DbForm   @relation(fields: [formId], references: [id], onDelete: Cascade)
+  submitter        DbUser   @relation(fields: [submitterAddress], references: [address])
+  files            DbFile[]
+
+  @@unique([formId, walrusBlobId])
+  @@map("submissions")
+}
+
+model DbFile {
+  id            String   @id @db.Uuid
+  submissionId  String   @map("submission_id") @db.Uuid
+  walrusBlobId  String   @unique @map("walrus_blob_id")
+  contentType   String   @map("content_type")
+  sizeBytes     BigInt   @map("size_bytes")
+  contentDigest String   @map("content_digest")
+  state         String
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  submission    DbSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  @@map("files")
+}
+
+model DbUploadJob {
+  id            String   @id @db.Uuid
+  ownerAddress  String   @map("owner_address")
+  artifactKind  String   @map("artifact_kind")
+  artifactId    String?  @map("artifact_id") @db.Uuid
+  walrusBlobId  String?  @map("walrus_blob_id")
+  state         String
+  failureReason String?  @map("failure_reason")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime @default(now()) @map("updated_at") @db.Timestamptz
+
+  owner         DbUser   @relation(fields: [ownerAddress], references: [address])
+
+  @@unique([ownerAddress, walrusBlobId])
+  @@map("upload_jobs")
+}
+
+model DbActivity {
+  id           BigInt   @id @default(autoincrement())
+  requestId    String   @map("request_id")
+  actorAddress String?  @map("actor_address")
+  action       String
+  targetKind   String?  @map("target_kind")
+  targetId     String?  @map("target_id") @db.Uuid
+  outcome      String
+  httpStatus   Int?     @map("http_status")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("activity")
+}
+
+model DbPermission {
+  id               String   @id @db.Uuid
+  formId           String   @map("form_id") @db.Uuid
+  granteeAddress   String   @map("grantee_address")
+  capability       String
+  grantedByAddress String   @map("granted_by_address")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  form             DbForm   @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  @@unique([formId, granteeAddress, capability])
+  @@map("permissions")
 }

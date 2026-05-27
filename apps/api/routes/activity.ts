@@ -29,7 +29,7 @@ import {
   type ApiErrorCode,
 } from '../error-envelope';
 import { assertOwner, ForbiddenError, AuditLogWriteError } from '../services/authorization';
-import { _formStore } from './submissions';
+import { db } from '../services/db';
 
 // Re-export the canonical envelope types so existing consumers of this module
 // continue to compile without changes.
@@ -106,7 +106,7 @@ function parseOptionalTimestamp(timestamp?: string): Date | undefined {
  * Uses the in-memory stores from routes/submissions.ts.
  */
 const activityAuthDb = {
-  getForm: (formId: string) => _formStore.get(formId),
+  getForm: (formId: string) => db.getForm(formId),
   getViewerPermission: () => undefined, // Activity query is owner-only
   getSubmission: () => undefined,
 };

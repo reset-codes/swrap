@@ -98,7 +98,7 @@ function extractColumns(tableBody: string): ColumnDef[] {
       continue;
     }
     // Column definition: starts with an identifier followed by a type
-    const colMatch = trimmed.match(/^(\w+)\s+(\w+)(.*)/s);
+    const colMatch = trimmed.match(/^(\w+)\s+(\w+)(.*)/);
     if (colMatch) {
       columns.push({
         name: colMatch[1].toLowerCase(),

@@ -44,7 +44,7 @@ function makeEntry(overrides: Partial<AuditLogEntry> = {}): AuditLogEntry {
 // Setup
 // ---------------------------------------------------------------------------
 
-beforeEach(() => {
+beforeEach(async () => {
   _resetAuditLogStore();
 });
 

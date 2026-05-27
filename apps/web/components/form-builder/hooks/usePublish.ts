@@ -32,14 +32,14 @@ export function usePublish() {
   const recordDraftSave = useDraftSessionStore((s) => s.recordDraftSave);
   const clearDraftSession = useDraftSessionStore((s) => s.clearDraftSession);
 
-  async function publish() {
+  async function publish(): Promise<{ publicUrl: string; slug: string } | null> {
     // ── Validate ────────────────────────────────────────────────────────
     if (fields.length === 0) {
       setPublishStatus('error', 'Add at least one field before publishing.');
       toast.error('Cannot publish', {
         description: 'Add at least one field before publishing.',
       });
-      return;
+      return null;
     }
 
     if (!title || title.trim().length === 0) {
@@ -47,7 +47,7 @@ export function usePublish() {
       toast.error('Cannot publish', {
         description: 'Add a form title before publishing.',
       });
-      return;
+      return null;
     }
 
     setPublishStatus('publishing');
@@ -80,7 +80,7 @@ export function usePublish() {
           toast.error('Save failed', {
             description: 'Could not save your draft. Please try again.',
           });
-          return;
+          return null;
         }
       } catch {
         setAutosaveStatus('error');
@@ -88,7 +88,7 @@ export function usePublish() {
         toast.error('Save failed', {
           description: 'Could not save your draft. Please try again.',
         });
-        return;
+        return null;
       }
     } else {
       // Update the existing draft with latest content before publish
@@ -114,11 +114,12 @@ export function usePublish() {
         const message = data?.error?.message ?? 'Publish failed. Please try again.';
         setPublishStatus('error', message);
         toast.error('Publish failed', { description: message });
-        return;
+        return null;
       }
 
       const data = await response.json() as { data?: { publicUrl?: string; slug?: string } };
-      const publicUrl = data?.data?.publicUrl ?? `${window.location.origin}/f/${data?.data?.slug}`;
+      const slugValue = data?.data?.slug ?? '';
+      const publicUrl = data?.data?.publicUrl ?? `${window.location.origin}/f/${slugValue}`;
 
       setPublishStatus('published');
       // Clear the persisted draft session — form is now published
@@ -132,10 +133,13 @@ export function usePublish() {
           ? { label: 'Open', onClick: () => window.open(publicUrl, '_blank', 'noopener,noreferrer') }
           : undefined,
       });
+
+      return { publicUrl, slug: slugValue };
     } catch (err) {
       const message = err instanceof Error ? err.message : 'An unexpected error occurred.';
       setPublishStatus('error', message);
       toast.error('Publish failed', { description: message });
+      return null;
     }
   }
 

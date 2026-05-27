@@ -22,11 +22,11 @@ function state(value: string | undefined): DependencyState {
 export async function GET() {
   const dependencies: HealthResponse['dependencies'] = {
     database: state(process.env.DATABASE_URL),
-    walrusAggregator: state(process.env.WALRUS_AGGREGATOR_URL),
-    walrusPublisher: state(process.env.WALRUS_PUBLISHER_URL),
+    walrusAggregator: state(process.env.WALRUS_AGGREGATOR_URL || 'https://aggregator.walrus-testnet.walrus.space'),
+    walrusPublisher: state(process.env.WALRUS_PUBLISHER_URL || 'https://publisher.walrus-testnet.walrus.space'),
     suiRpc: state(process.env.SUI_RPC_URL),
     sealPackage: state(process.env.SUI_POC_PACKAGE_ID),
-    infraWallet: state(process.env.INFRA_WALLET_PRIVATE_KEY),
+    infraWallet: state(process.env.INFRASTRUCTURE_WALLET_SECRET || process.env.INFRA_WALLET_PRIVATE_KEY),
   };
 
   const ok = Object.values(dependencies).every((value) => value === 'configured');

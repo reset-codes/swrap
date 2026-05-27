@@ -52,13 +52,13 @@ import {
 const PUBLISHER_URL = 'https://publisher.walrus.test';
 const AGGREGATOR_URL = 'https://aggregator.walrus.test';
 
-beforeEach(() => {
+beforeEach(async () => {
   setEnv('WALRUS_PUBLISHER_URL', PUBLISHER_URL);
   setEnv('WALRUS_AGGREGATOR_URL', AGGREGATOR_URL);
   vi.restoreAllMocks();
 });
 
-afterEach(() => {
+afterEach(async () => {
   vi.restoreAllMocks();
 });
 

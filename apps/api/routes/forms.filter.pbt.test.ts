@@ -64,7 +64,8 @@ vi.mock('../services/infrastructure-wallet', async (importOriginal) => {
   return {
     ...actual,
     sealEncrypt: vi.fn(async (plaintext: Uint8Array, _policyOwnerAddress: string) => {
-      const ciphertext = new Uint8Array([0xde, 0xad, 0xbe, 0xef, ...plaintext.slice(0, 8)]);
+      const ownerBytes = new TextEncoder().encode(_policyOwnerAddress);
+      const ciphertext = new Uint8Array([0xde, 0xad, 0xbe, 0xef, ...plaintext, ...ownerBytes]);
       const digest = 'b'.repeat(64);
       return { ciphertext, policyId: 'mock-policy-id', digest };
     }),
@@ -229,8 +230,8 @@ const validFormCreateRequestArb = fc
 // Setup / teardown
 // ---------------------------------------------------------------------------
 
-beforeEach(() => {
-  _resetFormStore();
+beforeEach(async () => {
+  await _resetFormStore();
   vi.mocked(walrusPut).mockClear();
   // Reset to default implementation (deterministic hash-based blob ID)
   vi.mocked(walrusPut).mockImplementation(async (bytes: Uint8Array) => {
@@ -245,8 +246,8 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => {
-  _resetFormStore();
+afterEach(async () => {
+  await _resetFormStore();
 });
 
 // ---------------------------------------------------------------------------
@@ -277,7 +278,7 @@ describe('Property 30 Extension: Metadata write round-trip', () => {
       fc.asyncProperty(
         validFormCreateRequestArb,
         async ({ ownerAddress, body }) => {
-          _resetFormStore();
+          await _resetFormStore();
 
           const app = buildApp();
           const { status, body: responseBody } = await appFetch(app, '/forms', {
@@ -342,7 +343,7 @@ describe('Property 30 Extension: Metadata write round-trip', () => {
           // The authenticatedAddress is different from the ownerAddress in the request
           // The API should use authenticatedAddress, NOT any address from the request
 
-          _resetFormStore();
+          await _resetFormStore();
 
           const app = buildApp();
           const { status, body: responseBody } = await appFetch(app, '/forms', {
@@ -375,7 +376,7 @@ describe('Property 30 Extension: Metadata write round-trip', () => {
         formDefinitionArb,
         privacyModeArb,
         async (formDefinition, privacyMode) => {
-          _resetFormStore();
+          await _resetFormStore();
 
           const app = buildApp();
           const { status, body } = await appFetch(app, '/forms', {
@@ -408,7 +409,7 @@ describe('Property 30 Extension: Metadata write round-trip', () => {
       fc.asyncProperty(
         validFormCreateRequestArb,
         async ({ ownerAddress, body }) => {
-          _resetFormStore();
+          await _resetFormStore();
 
           const app = buildApp();
 
@@ -465,7 +466,7 @@ describe('Property 30 Extension: Metadata write round-trip', () => {
         async ({ ownerAddress, body }, nonOwnerAddress) => {
           fc.pre(nonOwnerAddress !== ownerAddress);
 
-          _resetFormStore();
+          await _resetFormStore();
 
           const app = buildApp();
 
@@ -503,7 +504,7 @@ describe('Property 30 Extension: Metadata write round-trip', () => {
         suiAddressArb,
         fc.array(validFormCreateRequestArb, { minLength: 1, maxLength: 5 }),
         async (ownerAddress, requests) => {
-          _resetFormStore();
+          await _resetFormStore();
 
           const app = buildApp();
           const createdIds: string[] = [];
@@ -553,7 +554,7 @@ describe('Property 30 Extension: Metadata write round-trip', () => {
         validFormCreateRequestArb,
         validFormCreateRequestArb,
         async ([owner1, owner2], request1, request2) => {
-          _resetFormStore();
+          await _resetFormStore();
 
           const app = buildApp();
 
@@ -561,14 +562,20 @@ describe('Property 30 Extension: Metadata write round-trip', () => {
           await appFetch(app, '/forms', {
             method: 'POST',
             headers: { 'x-session-address': owner1 },
-            body: request1.body,
+            body: {
+              ...request1.body,
+              formDefinition: { ...request1.body.formDefinition, ownerAddress: owner1 },
+            },
           });
 
           // Create form for owner2
           await appFetch(app, '/forms', {
             method: 'POST',
             headers: { 'x-session-address': owner2 },
-            body: request2.body,
+            body: {
+              ...request2.body,
+              formDefinition: { ...request2.body.formDefinition, ownerAddress: owner2 },
+            },
           });
 
           // List as owner1
@@ -607,7 +614,7 @@ describe('Property 30 Extension: Idempotency', () => {
       fc.asyncProperty(
         validFormCreateRequestArb,
         async ({ ownerAddress, body }) => {
-          _resetFormStore();
+          await _resetFormStore();
 
           const app = buildApp();
 

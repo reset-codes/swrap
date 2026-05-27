@@ -7,6 +7,7 @@ import { FormSettings, type FormSettingsValues } from '@/components/forms/FormSe
 import { FormBuilder } from '@/components/forms/FormBuilder';
 import type { FieldConfig, FormMetadata, FormSchema } from '@/types/form';
 import type { ApiError } from '@/types/api';
+import { PublishSuccessModal } from '@poc/apps/web/components/form-builder/PublishSuccessModal';
 
 // ─── Edit Form Page ───────────────────────────────────────────────────────────
 
@@ -23,6 +24,11 @@ export default function EditFormPage() {
   const [, setSchema] = useState<FormSchema | null>(null);
   const [fields, setFields] = useState<FieldConfig[]>([]);
   const [encryptionMode, setEncryptionMode] = useState<string>('none');
+
+  // ── Publish Success Modal State ──
+  const [successModalOpen, setSuccessModalOpen] = useState(false);
+  const [publishedUrl, setPublishedUrl] = useState('');
+  const [publishedSlug, setPublishedSlug] = useState('');
 
   // ── Load form data ──────────────────────────────────────────────────────────
 
@@ -108,15 +114,19 @@ export default function EditFormPage() {
         return;
       }
 
-      await response.json();
+      const json = await response.json() as { data: { publicUrl: string; slug: string } };
+      const { publicUrl, slug } = json.data;
 
       // Update local state
       if (form) {
         setForm({ ...form, isPublished: true });
       }
       
+      setPublishedUrl(publicUrl);
+      setPublishedSlug(slug);
+      setSuccessModalOpen(true);
+
       router.refresh();
-      // Optionally show a success toast here
     } catch {
       setError('An unexpected error occurred. Please try again.');
     } finally {
@@ -202,6 +212,17 @@ export default function EditFormPage() {
           />
         </div>
       </div>
+
+      {/* ── Publish success glassmorphic modal ── */}
+      {form && (
+        <PublishSuccessModal
+          isOpen={successModalOpen}
+          onClose={() => setSuccessModalOpen(false)}
+          publicUrl={publishedUrl}
+          slug={publishedSlug}
+          formTitle={form.title}
+        />
+      )}
     </div>
   );
 }

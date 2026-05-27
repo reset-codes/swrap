@@ -57,6 +57,7 @@ import {
   type ApiResponseOk,
   type ApiResponseErr,
 } from '../error-envelope';
+import { db, prisma } from '../services/db';
 
 // Re-export the canonical envelope types so existing consumers of this module
 // continue to compile without changes.
@@ -191,74 +192,54 @@ const ListFormsQuerySchema = z.object({
 // FormRow is an alias for FormRecord from the orchestrator — the canonical
 // type for form metadata rows. Re-exported for backward compatibility with
 // existing tests and consumers.
-export type { FormRecord as FormRow } from '../services/metadata-orchestrator';
+export type { FormRecord, FormRecord as FormRow } from '../services/metadata-orchestrator';
 export type FormState = UploadState;
 
-// ---------------------------------------------------------------------------
-// In-memory stub DB layer
-// ---------------------------------------------------------------------------
-// Replace these with real Postgres calls once task 1 (DB migrations) lands.
-// The interface is intentionally thin so the swap is mechanical.
-//
-// This store implements the Db interface from metadata-orchestrator.ts so
-// that orchestrateFormCreate() can be called directly from the route handler.
+// ─── Durable Database Operations ──────────────────────────────────────────
 
-const formStore = new Map<string, FormRecord>();
-const uploadJobStore = new Map<string, UploadJobRecord>();
-
-/** Db adapter backed by the in-memory stores above. */
-const inMemoryDb: Db = {
-  getForm: (id) => formStore.get(id),
-  insertForm: (row) => { formStore.set(row.id, row); return row; },
-  getSubmission: (_id) => undefined,
-  insertSubmission: (row) => row,
-  getFile: (_id) => undefined,
-  insertFile: (row) => row,
-  insertUploadJob: (row) => { uploadJobStore.set(row.id, row); return row; },
-  updateUploadJobState: (jobId, state, failureReason) => {
-    const job = uploadJobStore.get(jobId);
-    if (job) {
-      job.state = state;
-      job.failureReason = failureReason ?? null;
-      job.updatedAt = new Date().toISOString();
-    }
-  },
-  findFormByBlob: (ownerAddress, walrusBlobId) =>
-    Array.from(formStore.values()).find(
-      (f) => f.ownerAddress === ownerAddress && f.walrusBlobId === walrusBlobId,
-    ),
-  findSubmissionByBlob: (_formId, _walrusBlobId) => undefined,
-};
-
-function dbGetForm(id: string): FormRecord | undefined {
-  return formStore.get(id);
+async function dbGetForm(id: string): Promise<FormRecord | undefined> {
+  return await db.getForm(id);
 }
 
-function dbListForms(filter: {
+async function dbListForms(filter: {
   ownerAddress?: string;
   state?: UploadState;
   limit: number;
   offset: number;
-}): FormRecord[] {
-  let rows = Array.from(formStore.values());
-
+}): Promise<FormRecord[]> {
+  const where: any = {};
   if (filter.ownerAddress !== undefined) {
-    rows = rows.filter((r) => r.ownerAddress === filter.ownerAddress);
+    where.ownerAddress = filter.ownerAddress;
   }
   if (filter.state !== undefined) {
-    rows = rows.filter((r) => r.state === filter.state);
+    where.state = filter.state;
   }
 
-  // Sort by createdAt descending (newest first)
-  rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const rows = await prisma.dbForm.findMany({
+    where,
+    orderBy: { createdAt: 'desc' },
+    take: filter.limit,
+    skip: filter.offset,
+  });
 
-  return rows.slice(filter.offset, filter.offset + filter.limit);
+  return rows.map((f) => ({
+    id: f.id,
+    ownerAddress: f.ownerAddress,
+    walrusBlobId: f.walrusBlobId,
+    privacyMode: f.privacyMode as any,
+    policyId: f.policyId,
+    version: f.version,
+    predecessorId: f.predecessorId,
+    state: f.state as any,
+    contentDigest: f.contentDigest ?? '',
+    sizeBytes: f.sizeBytes ? Number(f.sizeBytes) : 0,
+    createdAt: f.createdAt.toISOString(),
+  }));
 }
 
-// Exported for tests — allows resetting the in-memory store between test runs
-export function _resetFormStore(): void {
-  formStore.clear();
-  uploadJobStore.clear();
+// Exported for tests — allows resetting the database state between test runs
+export async function _resetFormStore(): Promise<void> {
+  await prisma.$executeRawUnsafe('TRUNCATE TABLE forms, upload_jobs, submissions, files, users, activity, permissions CASCADE;');
 }
 
 // ---------------------------------------------------------------------------
@@ -297,7 +278,7 @@ export function formsRouter(_config: ServerConfig): Router {
       //    orchestrateFormCreate handles: canonicalize → (encrypt if private) →
       //    walrusPut → existence check → metadata index → audit entry.
       //    Requirements: 3.3, 6.1–6.7
-      const formCountBefore = formStore.size;
+      const formCountBefore = await prisma.dbForm.count();
       let result: import('../services/metadata-orchestrator').CreateFormResult;
       try {
         result = await orchestrateFormCreate(
@@ -308,7 +289,7 @@ export function formsRouter(_config: ServerConfig): Router {
             version: 1,
           },
           sessionAddress,
-          inMemoryDb,
+          db,
         );
       } catch (orchErr) {
         if (orchErr instanceof BlobNotFoundError) {
@@ -336,7 +317,7 @@ export function formsRouter(_config: ServerConfig): Router {
       }
 
       // 4. Map orchestrator result to FormRow response
-      const formRow = dbGetForm(result.formId);
+      const formRow = await dbGetForm(result.formId);
       if (!formRow) {
         // Should not happen — orchestrator inserts the row before returning
         err('Internal', 'Form was created but could not be retrieved.', res, requestId, 500);
@@ -344,7 +325,8 @@ export function formsRouter(_config: ServerConfig): Router {
       }
 
       // Determine status: 200 for idempotent reconcile, 201 for new creation
-      const isIdempotent = formStore.size === formCountBefore;
+      const formCountAfter = await prisma.dbForm.count();
+      const isIdempotent = formCountBefore === formCountAfter;
 
       ok<FormRecord>(formRow, res, requestId, isIdempotent ? 200 : 201);
     } catch (e) {
@@ -391,7 +373,7 @@ export function formsRouter(_config: ServerConfig): Router {
         return;
       }
 
-      const rows = dbListForms({
+      const rows = await dbListForms({
         ownerAddress: effectiveOwner,
         state: query.state,
         limit: query.limit,
@@ -420,7 +402,7 @@ export function formsRouter(_config: ServerConfig): Router {
         return;
       }
 
-      const form = dbGetForm(id);
+      const form = await dbGetForm(id);
       if (!form) {
         err('NotFound', `Form ${id} not found.`, res, requestId, 404);
         return;
@@ -495,7 +477,7 @@ export function formsRouter(_config: ServerConfig): Router {
       const body = parseResult.data;
 
       // Look up the predecessor form
-      const predecessor = dbGetForm(id);
+      const predecessor = await dbGetForm(id);
       if (!predecessor) {
         err('NotFound', `Form ${id} not found.`, res, requestId, 404);
         return;
@@ -526,7 +508,7 @@ export function formsRouter(_config: ServerConfig): Router {
             predecessorId: predecessor.id,
           },
           sessionAddress,
-          inMemoryDb,
+          db,
         );
       } catch (orchErr) {
         if (orchErr instanceof BlobNotFoundError) {
@@ -553,7 +535,7 @@ export function formsRouter(_config: ServerConfig): Router {
         throw orchErr;
       }
 
-      const newFormRow = dbGetForm(result.formId);
+      const newFormRow = await dbGetForm(result.formId);
       if (!newFormRow) {
         err('Internal', 'Form version was created but could not be retrieved.', res, requestId, 500);
         return;

@@ -31,6 +31,7 @@ import {
   type SubmissionRow,
 } from './submissions';
 import { _resetAuditLogStore, _auditLogStore } from '../services/audit-log';
+import { db } from '../services/db';
 
 // ---------------------------------------------------------------------------
 // Track sealDecrypt invocations
@@ -122,7 +123,7 @@ let baseUrl: string;
 beforeEach(async () => {
   sealDecryptCallCount = 0;
   walrusGetCallCount = 0;
-  _clearStores();
+  await _clearStores();
   _resetAuditLogStore();
 
   const app = express();
@@ -150,8 +151,8 @@ const ownerAddress = '0xowner1234567890abcdef1234567890abcdef1234567890abcdef123
 const viewerAddress = '0xviewer1234567890abcdef1234567890abcdef1234567890abcdef1234567890';
 const strangerAddress = '0xstranger1234567890abcdef1234567890abcdef1234567890abcdef12345678';
 
-function seedPrivateSubmission(formId: string, submissionId: string): void {
-  _seedForm({
+async function seedPrivateSubmission(formId: string, submissionId: string): Promise<void> {
+  await _seedForm({
     id: formId,
     privacyMode: 'private',
     ownerAddress,
@@ -171,6 +172,7 @@ function seedPrivateSubmission(formId: string, submissionId: string): void {
     policyId: 'mock-policy-id',
     createdAt: new Date().toISOString(),
   };
+  await db.insertSubmission(submission as any);
   _submissionStore.set(submissionId, submission);
 }
 
@@ -200,11 +202,11 @@ describe('Authorization precedence invariant', () => {
         fc.uuid(),
         fc.uuid(),
         async (formId, submissionId) => {
-          _clearStores();
+          await _clearStores();
           _resetAuditLogStore();
           sealDecryptCallCount = 0;
 
-          seedPrivateSubmission(formId, submissionId);
+          await seedPrivateSubmission(formId, submissionId);
 
           // Owner should succeed — sealDecrypt called once
           const result = await decryptRequest(submissionId, ownerAddress);
@@ -222,11 +224,11 @@ describe('Authorization precedence invariant', () => {
         fc.uuid(),
         fc.uuid(),
         async (formId, submissionId) => {
-          _clearStores();
+          await _clearStores();
           _resetAuditLogStore();
           sealDecryptCallCount = 0;
 
-          seedPrivateSubmission(formId, submissionId);
+          await seedPrivateSubmission(formId, submissionId);
 
           // Stranger should fail — sealDecrypt must NOT be called
           const result = await decryptRequest(submissionId, strangerAddress);
@@ -252,11 +254,11 @@ describe('Rejection invariant', () => {
         // Generate a stranger address that is neither owner nor viewer
         fc.stringMatching(/^[0-9a-f]{40,64}$/).map((h) => `0x${h}stranger`),
         async (formId, submissionId, stranger) => {
-          _clearStores();
+          await _clearStores();
           _resetAuditLogStore();
           sealDecryptCallCount = 0;
 
-          seedPrivateSubmission(formId, submissionId);
+          await seedPrivateSubmission(formId, submissionId);
 
           const result = await decryptRequest(submissionId, stranger);
 
@@ -282,14 +284,14 @@ describe('Rejection invariant', () => {
         fc.uuid(),
         fc.uuid(),
         async (formId, submissionId) => {
-          _clearStores();
+          await _clearStores();
           _resetAuditLogStore();
           sealDecryptCallCount = 0;
 
-          seedPrivateSubmission(formId, submissionId);
+          await seedPrivateSubmission(formId, submissionId);
 
           // Grant viewer permission
-          _seedViewerPermission({
+          await _seedViewerPermission({
             formId,
             granteeAddress: viewerAddress,
             capability: 'view',
@@ -326,12 +328,12 @@ describe('Rejection invariant', () => {
         fc.uuid(),
         fc.uuid(),
         async (formId, submissionId) => {
-          _clearStores();
+          await _clearStores();
           _resetAuditLogStore();
           sealDecryptCallCount = 0;
 
           // Seed a PUBLIC form and submission
-          _seedForm({
+          await _seedForm({
             id: formId,
             privacyMode: 'public',
             ownerAddress,
@@ -350,6 +352,7 @@ describe('Rejection invariant', () => {
             state: 'indexed',
             createdAt: new Date().toISOString(),
           };
+          await db.insertSubmission(submission as any);
           _submissionStore.set(submissionId, submission);
 
           const result = await decryptRequest(submissionId, ownerAddress);
@@ -375,11 +378,11 @@ describe('Managed-authority invariant', () => {
         fc.uuid(),
         fc.uuid(),
         async (formId, submissionId) => {
-          _clearStores();
+          await _clearStores();
           _resetAuditLogStore();
           sealDecryptCallCount = 0;
 
-          seedPrivateSubmission(formId, submissionId);
+          await seedPrivateSubmission(formId, submissionId);
 
           const result = await decryptRequest(submissionId, ownerAddress);
           expect(result.status).toBe(200);
@@ -399,11 +402,11 @@ describe('Managed-authority invariant', () => {
         fc.uuid(),
         fc.uuid(),
         async (requestCount, formId, submissionId) => {
-          _clearStores();
+          await _clearStores();
           _resetAuditLogStore();
           sealDecryptCallCount = 0;
 
-          seedPrivateSubmission(formId, submissionId);
+          await seedPrivateSubmission(formId, submissionId);
 
           for (let i = 0; i < requestCount; i++) {
             const result = await decryptRequest(submissionId, ownerAddress);

@@ -68,9 +68,9 @@ function makeAuditEntry(overrides: Partial<AuditLogEntry> = {}): AuditLogEntry {
 async function fetchActivity(
   query: string = '',
   headers: Record<string, string> = {},
-): Promise<{ status: number; body: ApiResponse<AuditLogRowJson[]> }> {
+): Promise<{ status: number; body: any }> {
   const response = await fetch(`${baseUrl}?${query}`, { headers });
-  const body = (await response.json()) as ApiResponse<AuditLogRowJson[]>;
+  const body = (await response.json()) as any;
   return { status: response.status, body };
 }
 
@@ -108,9 +108,9 @@ afterAll(
 // Setup
 // ---------------------------------------------------------------------------
 
-beforeEach(() => {
+beforeEach(async () => {
   _resetAuditLogStore();
-  _clearStores();
+  await _clearStores();
 });
 
 // ---------------------------------------------------------------------------
@@ -183,7 +183,7 @@ describe('GET /activity — actorAddress filter', () => {
 
     expect(status).toBe(200);
     expect(body.result).toHaveLength(2);
-    expect(body.result.every((r) => r.actorAddress === '0xalice')).toBe(true);
+    expect(body.result.every((r: any) => r.actorAddress === '0xalice')).toBe(true);
   });
 
   it('returns an empty array when no entries match the actorAddress', async () => {
@@ -212,7 +212,7 @@ describe('GET /activity — formId filter with authorization', () => {
   });
 
   it('returns 403 when actor is not the form owner', async () => {
-    _seedForm({
+    await _seedForm({
       id: '550e8400-e29b-41d4-a716-446655440001',
       privacyMode: 'private',
       ownerAddress: '0xalice',
@@ -230,7 +230,7 @@ describe('GET /activity — formId filter with authorization', () => {
   });
 
   it('returns entries when actor is the form owner', async () => {
-    _seedForm({
+    await _seedForm({
       id: '550e8400-e29b-41d4-a716-446655440001',
       privacyMode: 'private',
       ownerAddress: '0xalice',
@@ -248,7 +248,7 @@ describe('GET /activity — formId filter with authorization', () => {
     // We should have at least our entry plus the authorization entry
     expect(body.result.length).toBeGreaterThanOrEqual(1);
     // Check that our entry is present
-    expect(body.result.some((r) => r.formId === '550e8400-e29b-41d4-a716-446655440001' && r.action === 'submission.decrypt')).toBe(true);
+    expect(body.result.some((r: any) => r.formId === '550e8400-e29b-41d4-a716-446655440001' && r.action === 'submission.decrypt')).toBe(true);
   });
 
   it('returns 403 when form does not exist', async () => {
@@ -339,7 +339,7 @@ describe('GET /activity — time range filter', () => {
 
 describe('GET /activity — combined filters', () => {
   it('ANDs multiple filter fields together', async () => {
-    _seedForm({
+    await _seedForm({
       id: '550e8400-e29b-41d4-a716-446655440001',
       privacyMode: 'private',
       ownerAddress: '0xalice',
@@ -364,7 +364,7 @@ describe('GET /activity — combined filters', () => {
     // We should have at least our submission.decrypt entry, plus the authorization.assertOwner entry from the auth check
     expect(body.result.length).toBeGreaterThanOrEqual(1);
     // Check that our specific entry is present
-    expect(body.result.some((r) => r.requestId === 'req-1')).toBe(true);
+    expect(body.result.some((r: any) => r.requestId === 'req-1')).toBe(true);
   });
 });
 

@@ -30,10 +30,7 @@ async function writeBlob(
   data: Buffer,
   contentType = 'application/octet-stream',
 ): Promise<{ blobId: string }> {
-  const publisherUrl = process.env.WALRUS_PUBLISHER_URL
-  if (!publisherUrl) {
-    throw new WalletError('WALRUS_PUBLISHER_URL is not configured.', 'NOT_CONFIGURED')
-  }
+  const publisherUrl = process.env.WALRUS_PUBLISHER_URL || 'https://publisher.walrus-testnet.walrus.space'
   const url = `${publisherUrl.replace(/\/+$/, '')}/v1/blobs?epochs=1`
   // Convert Buffer to ArrayBuffer for fetch body compatibility
   const bodyBytes: ArrayBuffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer
@@ -56,10 +53,7 @@ async function writeBlob(
 }
 
 async function readBlob(blobId: string): Promise<Buffer> {
-  const aggregatorUrl = process.env.WALRUS_AGGREGATOR_URL
-  if (!aggregatorUrl) {
-    throw new WalletError('WALRUS_AGGREGATOR_URL is not configured.', 'NOT_CONFIGURED')
-  }
+  const aggregatorUrl = process.env.WALRUS_AGGREGATOR_URL || 'https://aggregator.walrus-testnet.walrus.space'
   const url = `${aggregatorUrl.replace(/\/+$/, '')}/v1/blobs/${encodeURIComponent(blobId)}`
   const response = await fetch(url, { method: 'GET' })
   if (!response.ok) {
@@ -82,10 +76,10 @@ async function readBlob(blobId: string): Promise<Buffer> {
  * @throws WalletError with 'NOT_CONFIGURED' if the env var is absent or empty.
  */
 export function getInfraWalletKey(): string {
-  const key = process.env.INFRA_WALLET_PRIVATE_KEY
+  const key = process.env.INFRASTRUCTURE_WALLET_SECRET || process.env.INFRA_WALLET_PRIVATE_KEY
   if (!key || key.trim() === '') {
     throw new WalletError(
-      'Infrastructure wallet is not configured. Please set INFRA_WALLET_PRIVATE_KEY.',
+      'Infrastructure wallet is not configured. Please set INFRASTRUCTURE_WALLET_SECRET.',
       'NOT_CONFIGURED',
     )
   }

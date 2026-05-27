@@ -43,6 +43,7 @@ import {
 } from './submissions';
 import type { ServerConfig } from '../server-config';
 import { _auditLogStore, _resetAuditLogStore } from '../services/audit-log';
+import { db } from '../services/db';
 
 // ---------------------------------------------------------------------------
 // Mock sealEncrypt so private-form tests don't hit real Seal
@@ -549,13 +550,13 @@ async function appFetch(
 // Setup / teardown
 // ---------------------------------------------------------------------------
 
-beforeEach(() => {
-  _clearStores();
+beforeEach(async () => {
+  await _clearStores();
   vi.clearAllMocks();
 });
 
-afterEach(() => {
-  _clearStores();
+afterEach(async () => {
+  await _clearStores();
 });
 
 describe('Property 30 — Level 2: Route-level authorization gating on POST /submissions', () => {
@@ -577,8 +578,8 @@ describe('Property 30 — Level 2: Route-level authorization gating on POST /sub
         async (form, actorAddress) => {
           fc.pre(actorAddress !== form.ownerAddress);
 
-          _clearStores();
-          _seedForm(form);
+          await _clearStores();
+          await _seedForm(form);
 
           const activityLog: ActivityEntry[] = [];
           const app = buildAuthAwareApp(activityLog);
@@ -631,8 +632,8 @@ describe('Property 30 — Level 2: Route-level authorization gating on POST /sub
   it('Property 30g: owner actor receives 201 and activity records outcome = ok', async () => {
     await fc.assert(
       fc.asyncProperty(formRecordArb, async (form) => {
-        _clearStores();
-        _seedForm(form);
+        await _clearStores();
+        await _seedForm(form);
 
         const activityLog: ActivityEntry[] = [];
         const app = buildAuthAwareApp(activityLog);
@@ -685,8 +686,8 @@ describe('Property 30 — Level 2: Route-level authorization gating on POST /sub
           const formWithOwner = { ...form, ownerAddress: ownerAddr };
 
           // --- Non-owner attempt ---
-          _clearStores();
-          _seedForm(formWithOwner);
+          await _clearStores();
+          await _seedForm(formWithOwner);
 
           const log1: ActivityEntry[] = [];
           const app1 = buildAuthAwareApp(log1);
@@ -708,8 +709,8 @@ describe('Property 30 — Level 2: Route-level authorization gating on POST /sub
           expect(log1[0]?.outcome).toBe('denied');
 
           // --- Owner attempt ---
-          _clearStores();
-          _seedForm(formWithOwner);
+          await _clearStores();
+          await _seedForm(formWithOwner);
 
           const log2: ActivityEntry[] = [];
           const app2 = buildAuthAwareApp(log2);
@@ -745,8 +746,8 @@ describe('Property 30 — Level 2: Route-level authorization gating on POST /sub
   it('Property 30i: missing actor address header returns 401 and writes no row', async () => {
     await fc.assert(
       fc.asyncProperty(formRecordArb, async (form) => {
-        _clearStores();
-        _seedForm(form);
+        await _clearStores();
+        await _seedForm(form);
 
         const activityLog: ActivityEntry[] = [];
         const app = buildAuthAwareApp(activityLog);
@@ -898,12 +899,12 @@ describe('Property 37.1a — Authorization precedence invariant (Req 12.3, 12.5,
       fc.asyncProperty(
         privateFormRecordArb,
         async (form) => {
-          _clearStores();
+          await _clearStores();
           _resetAuditLogStore();
           vi.mocked(sealDecrypt).mockClear();
 
           // Seed the form
-          _seedForm(form);
+          await _seedForm(form);
 
           // Create a private submission for this form
           const submissionId = crypto.randomUUID();
@@ -920,6 +921,7 @@ describe('Property 37.1a — Authorization precedence invariant (Req 12.3, 12.5,
             policyId: form.policyId ?? undefined,
             createdAt: new Date().toISOString(),
           };
+          await db.insertSubmission(submissionRow as any);
           _submissionStore.set(submissionId, submissionRow);
 
           // Mock walrusGet to return valid ciphertext bytes
@@ -958,11 +960,11 @@ describe('Property 37.1a — Authorization precedence invariant (Req 12.3, 12.5,
         async (form, unauthorizedActor) => {
           fc.pre(unauthorizedActor !== form.ownerAddress);
 
-          _clearStores();
+          await _clearStores();
           _resetAuditLogStore();
           vi.mocked(sealDecrypt).mockClear();
 
-          _seedForm(form);
+          await _seedForm(form);
 
           const submissionId = crypto.randomUUID();
           const submissionRow: SubmissionRow = {
@@ -978,6 +980,7 @@ describe('Property 37.1a — Authorization precedence invariant (Req 12.3, 12.5,
             policyId: form.policyId ?? undefined,
             createdAt: new Date().toISOString(),
           };
+          await db.insertSubmission(submissionRow as any);
           _submissionStore.set(submissionId, submissionRow);
 
           const app = buildDecryptTestApp();
@@ -1008,14 +1011,14 @@ describe('Property 37.1a — Authorization precedence invariant (Req 12.3, 12.5,
         async (form, viewerAddress) => {
           fc.pre(viewerAddress !== form.ownerAddress);
 
-          _clearStores();
+          await _clearStores();
           _resetAuditLogStore();
           vi.mocked(sealDecrypt).mockClear();
 
-          _seedForm(form);
+          await _seedForm(form);
 
           // Grant viewer permission
-          _seedViewerPermission({
+          await _seedViewerPermission({
             formId: form.id,
             granteeAddress: viewerAddress,
             capability: 'view',
@@ -1035,6 +1038,7 @@ describe('Property 37.1a — Authorization precedence invariant (Req 12.3, 12.5,
             policyId: form.policyId ?? undefined,
             createdAt: new Date().toISOString(),
           };
+          await db.insertSubmission(submissionRow as any);
           _submissionStore.set(submissionId, submissionRow);
 
           vi.mocked(walrusGet).mockResolvedValueOnce(
@@ -1079,11 +1083,11 @@ describe('Property 37.1b — Rejection invariant (Req 7.10)', () => {
         async (form, unauthorizedActor) => {
           fc.pre(unauthorizedActor !== form.ownerAddress);
 
-          _clearStores();
+          await _clearStores();
           _resetAuditLogStore();
           vi.mocked(sealDecrypt).mockClear();
 
-          _seedForm(form);
+          await _seedForm(form);
 
           const submissionId = crypto.randomUUID();
           const submissionRow: SubmissionRow = {
@@ -1099,6 +1103,7 @@ describe('Property 37.1b — Rejection invariant (Req 7.10)', () => {
             policyId: form.policyId ?? undefined,
             createdAt: new Date().toISOString(),
           };
+          await db.insertSubmission(submissionRow as any);
           _submissionStore.set(submissionId, submissionRow);
 
           const app = buildDecryptTestApp();
@@ -1153,11 +1158,11 @@ describe('Property 37.1b — Rejection invariant (Req 7.10)', () => {
           const formWithOwner = { ...form, ownerAddress: ownerAddr };
 
           // --- Non-owner attempt ---
-          _clearStores();
+          await _clearStores();
           _resetAuditLogStore();
           vi.mocked(sealDecrypt).mockClear();
 
-          _seedForm(formWithOwner);
+          await _seedForm(formWithOwner);
 
           const submissionId = crypto.randomUUID();
           const submissionRow: SubmissionRow = {
@@ -1173,6 +1178,7 @@ describe('Property 37.1b — Rejection invariant (Req 7.10)', () => {
             policyId: formWithOwner.policyId ?? undefined,
             createdAt: new Date().toISOString(),
           };
+          await db.insertSubmission(submissionRow as any);
           _submissionStore.set(submissionId, submissionRow);
 
           const app1 = buildDecryptTestApp();
@@ -1189,11 +1195,12 @@ describe('Property 37.1b — Rejection invariant (Req 7.10)', () => {
           expect(deniedEntries.length).toBeGreaterThanOrEqual(1);
 
           // --- Owner attempt ---
-          _clearStores();
+          await _clearStores();
           _resetAuditLogStore();
           vi.mocked(sealDecrypt).mockClear();
 
-          _seedForm(formWithOwner);
+          await _seedForm(formWithOwner);
+          await db.insertSubmission(submissionRow as any);
           _submissionStore.set(submissionId, submissionRow);
 
           vi.mocked(walrusGet).mockResolvedValueOnce(
@@ -1241,11 +1248,11 @@ describe('Property 37.1c — Audit completeness invariant (Req 7.4)', () => {
       fc.asyncProperty(
         privateFormRecordArb,
         async (form) => {
-          _clearStores();
+          await _clearStores();
           _resetAuditLogStore();
           vi.mocked(sealDecrypt).mockClear();
 
-          _seedForm(form);
+          await _seedForm(form);
 
           const submissionId = crypto.randomUUID();
           const submissionRow: SubmissionRow = {
@@ -1261,6 +1268,7 @@ describe('Property 37.1c — Audit completeness invariant (Req 7.4)', () => {
             policyId: form.policyId ?? undefined,
             createdAt: new Date().toISOString(),
           };
+          await db.insertSubmission(submissionRow as any);
           _submissionStore.set(submissionId, submissionRow);
 
           vi.mocked(walrusGet).mockResolvedValueOnce(
@@ -1314,11 +1322,11 @@ describe('Property 37.1c — Audit completeness invariant (Req 7.4)', () => {
         async (form, unauthorizedActor) => {
           fc.pre(unauthorizedActor !== form.ownerAddress);
 
-          _clearStores();
+          await _clearStores();
           _resetAuditLogStore();
           vi.mocked(sealDecrypt).mockClear();
 
-          _seedForm(form);
+          await _seedForm(form);
 
           const submissionId = crypto.randomUUID();
           const submissionRow: SubmissionRow = {
@@ -1334,6 +1342,7 @@ describe('Property 37.1c — Audit completeness invariant (Req 7.4)', () => {
             policyId: form.policyId ?? undefined,
             createdAt: new Date().toISOString(),
           };
+          await db.insertSubmission(submissionRow as any);
           _submissionStore.set(submissionId, submissionRow);
 
           const app = buildDecryptTestApp();
@@ -1378,11 +1387,11 @@ describe('Property 37.1c — Audit completeness invariant (Req 7.4)', () => {
         publicFormRecordArb,
         suiAddr37Arb,
         async (form, actorAddress) => {
-          _clearStores();
+          await _clearStores();
           _resetAuditLogStore();
           vi.mocked(sealDecrypt).mockClear();
 
-          _seedForm(form);
+          await _seedForm(form);
 
           const submissionId = crypto.randomUUID();
           const plaintextPayload = '{"answer":"hello world"}';
@@ -1400,6 +1409,7 @@ describe('Property 37.1c — Audit completeness invariant (Req 7.4)', () => {
             state: 'indexed',
             createdAt: new Date().toISOString(),
           };
+          await db.insertSubmission(submissionRow as any);
           _submissionStore.set(submissionId, submissionRow);
 
           // Mock walrusGet to return valid plaintext bytes (digest check bypassed
@@ -1448,11 +1458,11 @@ describe('Property 37.1c — Audit completeness invariant (Req 7.4)', () => {
         privateFormRecordArb,
         fc.integer({ min: 1, max: 4 }),
         async (form, attemptCount) => {
-          _clearStores();
+          await _clearStores();
           _resetAuditLogStore();
           vi.mocked(sealDecrypt).mockClear();
 
-          _seedForm(form);
+          await _seedForm(form);
 
           const submissionId = crypto.randomUUID();
           const submissionRow: SubmissionRow = {
@@ -1468,6 +1478,7 @@ describe('Property 37.1c — Audit completeness invariant (Req 7.4)', () => {
             policyId: form.policyId ?? undefined,
             createdAt: new Date().toISOString(),
           };
+          await db.insertSubmission(submissionRow as any);
           _submissionStore.set(submissionId, submissionRow);
 
           // All attempts are unauthorized (fast path — no Walrus fetch needed)
@@ -1527,11 +1538,11 @@ describe('Property 37.1d — No bypass invariant (Req 7.3, 12.3, 12.5)', () => {
       fc.asyncProperty(
         privateFormRecordArb,
         async (form) => {
-          _clearStores();
+          await _clearStores();
           _resetAuditLogStore();
           vi.mocked(sealDecrypt).mockClear();
 
-          _seedForm(form);
+          await _seedForm(form);
 
           const submissionId = crypto.randomUUID();
           const submissionRow: SubmissionRow = {
@@ -1547,6 +1558,7 @@ describe('Property 37.1d — No bypass invariant (Req 7.3, 12.3, 12.5)', () => {
             policyId: form.policyId ?? undefined,
             createdAt: new Date().toISOString(),
           };
+          await db.insertSubmission(submissionRow as any);
           _submissionStore.set(submissionId, submissionRow);
 
           vi.mocked(walrusGet).mockResolvedValueOnce(
@@ -1598,11 +1610,11 @@ describe('Property 37.1d — No bypass invariant (Req 7.3, 12.3, 12.5)', () => {
             fc.pre(actorAddress !== form.ownerAddress);
           }
 
-          _clearStores();
+          await _clearStores();
           _resetAuditLogStore();
           vi.mocked(sealDecrypt).mockClear();
 
-          _seedForm(form);
+          await _seedForm(form);
 
           const submissionId = crypto.randomUUID();
           const submissionRow: SubmissionRow = {
@@ -1618,6 +1630,7 @@ describe('Property 37.1d — No bypass invariant (Req 7.3, 12.3, 12.5)', () => {
             policyId: form.policyId ?? undefined,
             createdAt: new Date().toISOString(),
           };
+          await db.insertSubmission(submissionRow as any);
           _submissionStore.set(submissionId, submissionRow);
 
           if (useOwner) {
@@ -1664,11 +1677,11 @@ describe('Property 37.1d — No bypass invariant (Req 7.3, 12.3, 12.5)', () => {
         async (form, unauthorizedActor) => {
           fc.pre(unauthorizedActor !== form.ownerAddress);
 
-          _clearStores();
+          await _clearStores();
           _resetAuditLogStore();
           vi.mocked(sealDecrypt).mockClear();
 
-          _seedForm(form);
+          await _seedForm(form);
 
           const submissionId = crypto.randomUUID();
           const submissionRow: SubmissionRow = {
@@ -1684,6 +1697,7 @@ describe('Property 37.1d — No bypass invariant (Req 7.3, 12.3, 12.5)', () => {
             policyId: form.policyId ?? undefined,
             createdAt: new Date().toISOString(),
           };
+          await db.insertSubmission(submissionRow as any);
           _submissionStore.set(submissionId, submissionRow);
 
           const app = buildDecryptTestApp();

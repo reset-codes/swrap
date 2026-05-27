@@ -196,7 +196,7 @@ function createTestSubmission(
 // Setup / teardown
 // ---------------------------------------------------------------------------
 
-beforeEach(() => {
+beforeEach(async () => {
   _resetAuditLogStore();
   vi.clearAllMocks();
   sealDecryptCallCount = 0;

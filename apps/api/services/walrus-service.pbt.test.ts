@@ -65,13 +65,13 @@ import {
 const PUBLISHER_URL = 'https://publisher.walrus.test';
 const AGGREGATOR_URL = 'https://aggregator.walrus.test';
 
-beforeEach(() => {
+beforeEach(async () => {
   setEnv('WALRUS_PUBLISHER_URL', PUBLISHER_URL);
   setEnv('WALRUS_AGGREGATOR_URL', AGGREGATOR_URL);
   vi.restoreAllMocks();
 });
 
-afterEach(() => {
+afterEach(async () => {
   vi.restoreAllMocks();
 });
 
@@ -265,11 +265,11 @@ describe('Property 16: Walrus integrity verification rejects digest mismatches',
 // ---------------------------------------------------------------------------
 
 describe('Property 17: Walrus fetch retry is bounded', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.useFakeTimers();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.useRealTimers();
     vi.restoreAllMocks();
   });

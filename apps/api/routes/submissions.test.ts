@@ -21,6 +21,7 @@ import {
   type ViewerPermission,
 } from './submissions';
 import type { ServerConfig } from '../server-config';
+import { db, prisma } from '../services/db';
 
 // ---------------------------------------------------------------------------
 // Mock infrastructure-wallet sealEncrypt + sealDecrypt
@@ -167,7 +168,7 @@ const PRIVATE_FORM: FormRecord = {
   privacyMode: 'private',
   ownerAddress: '0xdeadbeef',
   walrusBlobId: 'form-blob-private',
-  policyId: 'policy-abc',
+  policyId: 'test-policy-id',
   version: 1,
   predecessorId: null,
   state: 'indexed',
@@ -182,18 +183,18 @@ const VALID_SUBMITTER = '0x1234567890abcdef1234567890abcdef1234567890abcdef12345
 // Setup / teardown
 // ---------------------------------------------------------------------------
 
-beforeEach(() => {
-  _clearStores();
-  _seedForm(PUBLIC_FORM);
-  _seedForm(PRIVATE_FORM);
+beforeEach(async () => {
+  await _clearStores();
+  await _seedForm(PUBLIC_FORM);
+  await _seedForm(PRIVATE_FORM);
   vi.mocked(sealEncrypt).mockClear();
   vi.mocked(sealDecrypt).mockClear();
   vi.mocked(walrusPut).mockClear();
   vi.mocked(walrusGet).mockClear();
 });
 
-afterEach(() => {
-  _clearStores();
+afterEach(async () => {
+  await _clearStores();
 });
 
 // ---------------------------------------------------------------------------
@@ -903,12 +904,11 @@ describe('GET /submissions/:id/decrypt — authorization gating (Req 4.6, 7.3, 1
 
   it('returns 403 when authorization check errors (form not found) — treat as rejection (Req 7.3)', async () => {
     const app = buildApp();
-    // Create a submission then remove the form from the store to simulate
-    // a missing form record (authorization check error → treat as rejection)
+    // Create a submission
     const submissionId = await createPrivateSubmission(app);
-    // Remove the form to trigger the "form not found" path in assertDecryptionAuthorized
-    const { _formStore: formStore } = await import('./submissions');
-    formStore.delete(PRIVATE_FORM.id);
+    
+    // Mock db.getForm to return undefined to simulate a missing form record
+    vi.spyOn(db, 'getForm').mockResolvedValueOnce(undefined);
 
     const { status, body } = await appFetch(app, `/submissions/${submissionId}/decrypt`, {
       headers: { 'x-actor-address': PRIVATE_FORM.ownerAddress },
@@ -918,9 +918,6 @@ describe('GET /submissions/:id/decrypt — authorization gating (Req 4.6, 7.3, 1
     expect((body as any).error.code).toBe('Forbidden');
     // sealDecrypt must NOT be called when authorization check itself errors
     expect(sealDecrypt).not.toHaveBeenCalled();
-
-    // Restore the form for subsequent tests
-    _seedForm(PRIVATE_FORM);
   });
 });
 
@@ -1025,7 +1022,7 @@ describe('GET /submissions/:id/decrypt — viewer permission (Req 12.5, 13.3)', 
     const viewerAddress = '0xaaaa000000000000000000000000000000000000000000000000000000000001';
     const plaintextBytes = new TextEncoder().encode('{"secret":"viewer can see"}');
 
-    _seedViewerPermission({
+    await _seedViewerPermission({
       formId: PRIVATE_FORM.id,
       granteeAddress: viewerAddress,
       capability: 'view',
@@ -1049,7 +1046,7 @@ describe('GET /submissions/:id/decrypt — viewer permission (Req 12.5, 13.3)', 
     const app = buildApp();
     const submitterAddress = '0xbbbb000000000000000000000000000000000000000000000000000000000002';
 
-    _seedViewerPermission({
+    await _seedViewerPermission({
       formId: PRIVATE_FORM.id,
       granteeAddress: submitterAddress,
       capability: 'submit', // submit capability does not grant decryption

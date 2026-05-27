@@ -39,6 +39,7 @@ import { InspectorPanel } from './InspectorPanel';
 import { FieldCard, type PocField } from './FieldCard';
 import { FieldPickerModal } from './FieldPickerModal';
 import { TemplatePickerModal } from './TemplatePickerModal';
+import { PublishSuccessModal } from './PublishSuccessModal';
 import type { FormTemplate } from './templates';
 import { useFormBuilderStore } from '../../stores/form-builder-store';
 import { useDraftSessionStore } from '../../stores/draft-session-store';
@@ -107,6 +108,20 @@ export function CanvasBuilderPage({
   useUndoRedoKeys();
   const { publish } = usePublish();
   const { saveDraft } = useSaveDraft();
+
+  // ── Publish Success Modal State ──────────────────────────────────────────
+  const [successModalOpen, setSuccessModalOpen] = React.useState(false);
+  const [publishedUrl, setPublishedUrl] = React.useState('');
+  const [publishedSlug, setPublishedSlug] = React.useState('');
+
+  async function handlePublish() {
+    const res = await publish();
+    if (res) {
+      setPublishedUrl(res.publicUrl);
+      setPublishedSlug(res.slug);
+      setSuccessModalOpen(true);
+    }
+  }
 
   // ── Derived state ───────────────────────────────────────────────────────
   const selectedField = React.useMemo<PocField | null>(
@@ -435,7 +450,7 @@ export function CanvasBuilderPage({
         onTitleChange={setTitle}
         autosaveStatus={autosaveStatus}
         onSaveDraft={handleSaveDraft}
-        onPublish={publish}
+        onPublish={handlePublish}
         publishLoading={publishStatus === 'publishing'}
         formBlobId={_formBlobId}
         draftFormId={draftFormId ?? undefined}
@@ -526,6 +541,15 @@ export function CanvasBuilderPage({
         open={showTemplateModal}
         onClose={() => setShowTemplateModal(false)}
         onSelect={handleTemplateSelect}
+      />
+
+      {/* ── Publish success glassmorphic modal ─────────────────────── */}
+      <PublishSuccessModal
+        isOpen={successModalOpen}
+        onClose={() => setSuccessModalOpen(false)}
+        publicUrl={publishedUrl}
+        slug={publishedSlug}
+        formTitle={title}
       />
     </div>
   );

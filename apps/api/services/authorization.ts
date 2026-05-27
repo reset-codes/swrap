@@ -49,7 +49,7 @@ import type { FormRecord, SubmissionRecord } from './metadata-orchestrator';
  */
 export interface AuthDb {
   /** Look up a form record by ID. Returns `undefined` if not found. */
-  getForm(formId: string): FormRecord | undefined;
+  getForm(formId: string): Promise<FormRecord | undefined> | FormRecord | undefined;
 
   /**
    * Look up a viewer permission grant for a specific (formId, granteeAddress)
@@ -61,13 +61,13 @@ export interface AuthDb {
   getViewerPermission(
     formId: string,
     granteeAddress: string,
-  ): ViewerPermissionRecord | undefined;
+  ): Promise<ViewerPermissionRecord | undefined> | ViewerPermissionRecord | undefined;
 
   /**
    * Look up a submission record by ID. Returns `undefined` if not found.
    * Used by `assertViewerOrOwner` when `submissionId` is provided.
    */
-  getSubmission(submissionId: string): SubmissionRecord | undefined;
+  getSubmission(submissionId: string): Promise<SubmissionRecord | undefined> | SubmissionRecord | undefined;
 }
 
 /**
@@ -120,12 +120,12 @@ export class ForbiddenError extends Error {
  *   - The form is not found (treated as rejection per Requirement 7.3).
  *   - The actor address does not match the form's `ownerAddress`.
  */
-function checkOwnership(
+async function checkOwnership(
   actorAddress: string,
   formId: string,
   db: AuthDb,
-): { authorized: true; form: FormRecord } | { authorized: false; reason: string } {
-  const form = db.getForm(formId);
+): Promise<{ authorized: true; form: FormRecord } | { authorized: false; reason: string }> {
+  const form = await db.getForm(formId);
 
   if (!form) {
     return {
@@ -152,13 +152,13 @@ function checkOwnership(
  * For decryption, `capability = 'view'` or `'manage'` is required.
  * For general viewer access, any capability is accepted.
  */
-function checkViewerPermission(
+async function checkViewerPermission(
   actorAddress: string,
   formId: string,
   db: AuthDb,
   requiredCapabilities: ReadonlyArray<'view' | 'submit' | 'manage'>,
-): boolean {
-  const perm = db.getViewerPermission(formId, actorAddress);
+): Promise<boolean> {
+  const perm = await db.getViewerPermission(formId, actorAddress);
   if (!perm) return false;
   return (requiredCapabilities as string[]).includes(perm.capability);
 }
@@ -193,7 +193,7 @@ export async function assertOwner(
   db: AuthDb,
   requestId: string = crypto.randomUUID(),
 ): Promise<void> {
-  const result = checkOwnership(actorAddress, formId, db);
+  const result = await checkOwnership(actorAddress, formId, db);
 
   if (!result.authorized) {
     // Write denied audit entry BEFORE throwing so the entry is always recorded.
@@ -262,7 +262,7 @@ export async function assertViewerOrOwner(
   db: AuthDb,
   requestId: string = crypto.randomUUID(),
 ): Promise<void> {
-  const ownerResult = checkOwnership(actorAddress, formId, db);
+  const ownerResult = await checkOwnership(actorAddress, formId, db);
 
   // Ownership check passes — authorized.
   if (ownerResult.authorized) {
@@ -282,7 +282,7 @@ export async function assertViewerOrOwner(
   }
 
   // If the form was not found, reject immediately (Requirement 7.3).
-  const form = db.getForm(formId);
+  const form = await db.getForm(formId);
   if (!form) {
     const reason = `Form '${formId}' not found — treating as authorization rejection`;
     await writeAuditEntry({
@@ -302,7 +302,7 @@ export async function assertViewerOrOwner(
   }
 
   // Viewer permission check — any capability grants access.
-  const hasViewerPermission = checkViewerPermission(
+  const hasViewerPermission = await checkViewerPermission(
     actorAddress,
     formId,
     db,
@@ -385,7 +385,7 @@ export async function assertDecryptionAuthorized(
   db: AuthDb,
   requestId: string = crypto.randomUUID(),
 ): Promise<void> {
-  const ownerResult = checkOwnership(actorAddress, formId, db);
+  const ownerResult = await checkOwnership(actorAddress, formId, db);
 
   // Ownership check passes — authorized to decrypt.
   if (ownerResult.authorized) {
@@ -405,7 +405,7 @@ export async function assertDecryptionAuthorized(
   }
 
   // If the form was not found, reject immediately (Requirement 7.3).
-  const form = db.getForm(formId);
+  const form = await db.getForm(formId);
   if (!form) {
     const reason = `Form '${formId}' not found — treating as authorization rejection`;
     await writeAuditEntry({
@@ -426,7 +426,7 @@ export async function assertDecryptionAuthorized(
 
   // Viewer permission check — only 'view' or 'manage' capability authorizes
   // decryption (Requirement 4.6, 12.5).
-  const hasDecryptPermission = checkViewerPermission(
+  const hasDecryptPermission = await checkViewerPermission(
     actorAddress,
     formId,
     db,

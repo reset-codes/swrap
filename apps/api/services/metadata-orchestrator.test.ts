@@ -94,14 +94,14 @@ function makeDb(): Db & {
     submissions,
     files,
     jobs,
-    getForm: (id) => forms.get(id),
-    insertForm: (row) => { forms.set(row.id, row); return row; },
-    getSubmission: (id) => submissions.get(id),
-    insertSubmission: (row) => { submissions.set(row.id, row); return row; },
-    getFile: (id) => files.get(id),
-    insertFile: (row) => { files.set(row.id, row); return row; },
-    insertUploadJob: (row) => { jobs.set(row.id, row); return row; },
-    updateUploadJobState: (jobId, state, failureReason) => {
+    getForm: async (id) => forms.get(id),
+    insertForm: async (row) => { forms.set(row.id, row); return row; },
+    getSubmission: async (id) => submissions.get(id),
+    insertSubmission: async (row) => { submissions.set(row.id, row); return row; },
+    getFile: async (id) => files.get(id),
+    insertFile: async (row) => { files.set(row.id, row); return row; },
+    insertUploadJob: async (row) => { jobs.set(row.id, row); return row; },
+    updateUploadJobState: async (jobId, state, failureReason) => {
       const job = jobs.get(jobId);
       if (job) {
         job.state = state;
@@ -109,11 +109,11 @@ function makeDb(): Db & {
         job.updatedAt = new Date().toISOString();
       }
     },
-    findFormByBlob: (ownerAddress, walrusBlobId) =>
+    findFormByBlob: async (ownerAddress, walrusBlobId) =>
       Array.from(forms.values()).find(
         (f) => f.ownerAddress === ownerAddress && f.walrusBlobId === walrusBlobId,
       ),
-    findSubmissionByBlob: (formId, walrusBlobId) =>
+    findSubmissionByBlob: async (formId, walrusBlobId) =>
       Array.from(submissions.values()).find(
         (s) => s.formId === formId && s.walrusBlobId === walrusBlobId,
       ),
@@ -132,7 +132,7 @@ const POLICY_ID = '0xpolicy123';
 describe('orchestrateFormCreate', () => {
   let db: ReturnType<typeof makeDb>;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     db = makeDb();
     vi.clearAllMocks();
     vi.mocked(walrusPutWithCliFallback).mockResolvedValue({ blobId: BLOB_ID, sizeBytes: 42 });
@@ -214,9 +214,9 @@ describe('orchestrateFormCreate', () => {
 
     const stateHistory: UploadState[] = [];
     const originalUpdate = db.updateUploadJobState.bind(db);
-    db.updateUploadJobState = (jobId, state, reason) => {
+    db.updateUploadJobState = async (jobId, state, reason) => {
       stateHistory.push(state);
-      originalUpdate(jobId, state, reason);
+      await originalUpdate(jobId, state, reason);
     };
 
     await orchestrateFormCreate(
@@ -231,9 +231,9 @@ describe('orchestrateFormCreate', () => {
   it('transitions job through uploading → uploaded → indexed for public form', async () => {
     const stateHistory: UploadState[] = [];
     const originalUpdate = db.updateUploadJobState.bind(db);
-    db.updateUploadJobState = (jobId, state, reason) => {
+    db.updateUploadJobState = async (jobId, state, reason) => {
       stateHistory.push(state);
-      originalUpdate(jobId, state, reason);
+      await originalUpdate(jobId, state, reason);
     };
 
     await orchestrateFormCreate(
@@ -342,7 +342,7 @@ describe('orchestrateFormCreate', () => {
 describe('orchestrateSubmissionCreate', () => {
   let db: ReturnType<typeof makeDb>;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     db = makeDb();
     vi.clearAllMocks();
     vi.mocked(walrusPutWithCliFallback).mockResolvedValue({ blobId: BLOB_ID, sizeBytes: 55 });
@@ -499,9 +499,9 @@ describe('orchestrateSubmissionCreate', () => {
     const form = seedForm('public');
     const stateHistory: UploadState[] = [];
     const originalUpdate = db.updateUploadJobState.bind(db);
-    db.updateUploadJobState = (jobId, state, reason) => {
+    db.updateUploadJobState = async (jobId, state, reason) => {
       stateHistory.push(state);
-      originalUpdate(jobId, state, reason);
+      await originalUpdate(jobId, state, reason);
     };
 
     await orchestrateSubmissionCreate(
@@ -523,9 +523,9 @@ describe('orchestrateSubmissionCreate', () => {
 
     const stateHistory: UploadState[] = [];
     const originalUpdate = db.updateUploadJobState.bind(db);
-    db.updateUploadJobState = (jobId, state, reason) => {
+    db.updateUploadJobState = async (jobId, state, reason) => {
       stateHistory.push(state);
-      originalUpdate(jobId, state, reason);
+      await originalUpdate(jobId, state, reason);
     };
 
     await orchestrateSubmissionCreate(
@@ -545,7 +545,7 @@ describe('orchestrateSubmissionCreate', () => {
 describe('orchestrateFileCreate', () => {
   let db: ReturnType<typeof makeDb>;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     db = makeDb();
     vi.clearAllMocks();
     vi.mocked(walrusPutWithCliFallback).mockResolvedValue({ blobId: BLOB_ID, sizeBytes: 200 });
@@ -648,9 +648,9 @@ describe('orchestrateFileCreate', () => {
     const sub = seedSubmission();
     const stateHistory: UploadState[] = [];
     const originalUpdate = db.updateUploadJobState.bind(db);
-    db.updateUploadJobState = (jobId, state, reason) => {
+    db.updateUploadJobState = async (jobId, state, reason) => {
       stateHistory.push(state);
-      originalUpdate(jobId, state, reason);
+      await originalUpdate(jobId, state, reason);
     };
 
     await orchestrateFileCreate(

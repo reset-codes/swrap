@@ -32,6 +32,8 @@
  * Requirements: 5.5, 7.4, 12.4, 14.1, 14.2, 14.3, 14.4, 14.6, 14.7
  */
 
+import { prisma } from './db';
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -313,28 +315,37 @@ function assertNoSensitiveData(entry: AuditLogEntry): void {
 }
 
 // ---------------------------------------------------------------------------
-// In-memory store (stub — replaced by Postgres in a later task)
+// In-memory store (stub — kept as secondary cache & sync target for unit tests)
 // ---------------------------------------------------------------------------
 
 /**
  * The in-memory audit log store.
- *
- * This is an append-only array. No element is ever removed or mutated after
- * insertion. The real Postgres implementation will use an `INSERT`-only
- * pattern against the `activity` table (see design.md §5 Postgres Schema).
- *
  * Exported for test inspection only — production code MUST use
  * `writeAuditEntry` and `queryAuditLog`.
  *
  * @internal
  */
-export const _auditLogStore: AuditLogRow[] = [];
+export let _auditLogStore: AuditLogRow[] = [];
 
 /**
  * Auto-incrementing ID counter (mirrors `BIGSERIAL` in Postgres).
  * @internal
  */
 let _nextId = 1;
+
+/**
+ * Deterministic safe UUID generator.
+ * Since test mock values (like 'form-A') are invalid UUIDs, we deterministically
+ * hash non-UUID strings using MD5 so Postgres accepts them as valid UUIDs.
+ */
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function toSafeUuid(val: string | null | undefined): string | null {
+  if (!val) return null;
+  if (UUID_REGEX.test(val)) return val;
+  const crypto = require('crypto');
+  const hash = crypto.createHash('md5').update(val).digest('hex');
+  return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-${hash.slice(12, 16)}-${hash.slice(16, 20)}-${hash.slice(20, 32)}`;
+}
 
 /**
  * Reset the in-memory store. FOR TESTING ONLY.
@@ -344,9 +355,10 @@ let _nextId = 1;
  *
  * @internal
  */
-export function _resetAuditLogStore(): void {
-  _auditLogStore.length = 0;
+export async function _resetAuditLogStore(): Promise<void> {
+  _auditLogStore = [];
   _nextId = 1;
+  await prisma.dbActivity.deleteMany({});
 }
 
 // ---------------------------------------------------------------------------
@@ -384,9 +396,33 @@ export async function writeAuditEntry(entry: AuditLogEntry): Promise<void> {
       createdAt: new Date(),
     };
 
-    // Append-only: push to the store. In the Postgres implementation this
-    // becomes an INSERT with no UPDATE or DELETE counterpart.
+    // Update the in-memory cache for legacy unit tests
     _auditLogStore.push(row);
+
+    // Serialize extra fields into action for schema-less persistence in the activity table
+    const actionData = JSON.stringify({
+      originalAction: entry.action,
+      formId: entry.formId,
+      submissionId: entry.submissionId,
+      authorizationResult: entry.authorizationResult,
+      rejectionReason: entry.rejectionReason,
+    });
+
+    const safeTargetId = toSafeUuid(entry.targetId);
+
+    // Persist to Postgres using Prisma
+    await prisma.dbActivity.create({
+      data: {
+        requestId: entry.requestId,
+        actorAddress: entry.actorAddress === 'unknown' ? null : entry.actorAddress,
+        action: actionData,
+        targetKind: entry.targetKind,
+        targetId: safeTargetId,
+        outcome: entry.outcome,
+        httpStatus: entry.httpStatus,
+        createdAt: row.createdAt,
+      },
+    });
   } catch (err) {
     // Wrap any unexpected error in AuditLogWriteError so callers have a
     // single error type to handle.
@@ -418,22 +454,80 @@ export async function writeAuditEntry(entry: AuditLogEntry): Promise<void> {
 export async function queryAuditLog(filter: AuditLogFilter = {}): Promise<AuditLogRow[]> {
   const { actorAddress, formId, submissionId, fromTime, toTime } = filter;
 
-  return _auditLogStore.filter((row) => {
-    if (actorAddress !== undefined && row.actorAddress !== actorAddress) {
-      return false;
+  const where: any = {};
+  if (actorAddress !== undefined) {
+    where.actorAddress = actorAddress === 'unknown' ? null : actorAddress;
+  }
+  if (fromTime !== undefined || toTime !== undefined) {
+    where.createdAt = {};
+    if (fromTime !== undefined) {
+      where.createdAt.gte = fromTime;
     }
+    if (toTime !== undefined) {
+      where.createdAt.lte = toTime;
+    }
+  }
+
+  // Retrieve records from the Postgres database
+  const rows = await prisma.dbActivity.findMany({
+    where,
+    orderBy: {
+      id: 'asc',
+    },
+  });
+
+  const mappedRows: AuditLogRow[] = rows.map((r) => {
+    let parsedAction = r.action;
+    let fId: string | null = null;
+    let sId: string | null = null;
+    let authResult: AuthorizationResult = 'granted';
+    let rejReason: string | undefined = undefined;
+
+    try {
+      const parsed = JSON.parse(r.action);
+      if (parsed && typeof parsed === 'object' && 'originalAction' in parsed) {
+        parsedAction = parsed.originalAction;
+        fId = parsed.formId;
+        sId = parsed.submissionId;
+        authResult = parsed.authorizationResult;
+        rejReason = parsed.rejectionReason;
+      }
+    } catch {
+      // Fallback mapping for non-JSON actions (e.g., pre-existing legacy entries)
+      if (r.targetKind === 'form') {
+        fId = r.targetId;
+      } else if (r.targetKind === 'submission') {
+        sId = r.targetId;
+      }
+      authResult = r.outcome === 'denied' ? 'denied' : 'granted';
+    }
+
+    return {
+      id: Number(r.id),
+      requestId: r.requestId,
+      actorAddress: r.actorAddress ?? 'unknown',
+      action: parsedAction,
+      targetKind: r.targetKind as TargetKind,
+      targetId: r.targetId,
+      formId: fId,
+      submissionId: sId,
+      authorizationResult: authResult,
+      outcome: r.outcome as AuditOutcome,
+      httpStatus: r.httpStatus ?? 200,
+      rejectionReason: rejReason,
+      createdAt: r.createdAt,
+    };
+  });
+
+  // Apply formId and submissionId filtering in-memory
+  return mappedRows.filter((row) => {
     if (formId !== undefined && row.formId !== formId) {
       return false;
     }
     if (submissionId !== undefined && row.submissionId !== submissionId) {
       return false;
     }
-    if (fromTime !== undefined && row.createdAt < fromTime) {
-      return false;
-    }
-    if (toTime !== undefined && row.createdAt > toTime) {
-      return false;
-    }
     return true;
   });
 }
+

@@ -29,9 +29,10 @@ export async function POST(_request: Request, { params }: RouteContext) {
   }
 
   const { formId } = await params
+  const idempotencyKey = _request.headers.get('x-idempotency-key') || _request.headers.get('X-Idempotency-Key')
 
   try {
-    const result = await publishForm(formId, session.user.id)
+    const result = await publishForm(formId, session.user.id, idempotencyKey)
     return NextResponse.json(apiSuccess(result))
   } catch (err) {
     if (err instanceof ServiceError) {

@@ -112,7 +112,7 @@ function setEnv(key: string, value: string | undefined) {
 describe('getInfrastructureWallet', () => {
   const originalEnv = process.env.INFRASTRUCTURE_WALLET_SECRET;
 
-  afterEach(() => {
+  afterEach(async () => {
     setEnv('INFRASTRUCTURE_WALLET_SECRET', originalEnv);
   });
 
@@ -184,12 +184,12 @@ describe('sealEncrypt', () => {
   const originalWalletSecret = process.env.INFRASTRUCTURE_WALLET_SECRET;
   const originalPackageId = process.env.SUI_POC_PACKAGE_ID;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     setEnv('INFRASTRUCTURE_WALLET_SECRET', TEST_SECRET_BECH32);
     setEnv('SUI_POC_PACKAGE_ID', '0x' + '12'.repeat(32));
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     setEnv('INFRASTRUCTURE_WALLET_SECRET', originalWalletSecret);
     setEnv('SUI_POC_PACKAGE_ID', originalPackageId);
     vi.clearAllMocks();
@@ -292,12 +292,12 @@ describe('sealDecrypt', () => {
   const originalWalletSecret = process.env.INFRASTRUCTURE_WALLET_SECRET;
   const originalPackageId = process.env.SUI_POC_PACKAGE_ID;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     setEnv('INFRASTRUCTURE_WALLET_SECRET', TEST_SECRET_BECH32);
     setEnv('SUI_POC_PACKAGE_ID', '0x' + '12'.repeat(32));
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     setEnv('INFRASTRUCTURE_WALLET_SECRET', originalWalletSecret);
     setEnv('SUI_POC_PACKAGE_ID', originalPackageId);
     vi.clearAllMocks();

@@ -63,6 +63,7 @@ import {
   type ApiResponse,
   type ApiErrorCode,
 } from '../error-envelope';
+import { db, prisma } from '../services/db';
 
 // Re-export the canonical envelope types so existing consumers of this module
 // continue to compile without changes.
@@ -128,16 +129,13 @@ export interface ViewerPermission {
   capability: 'view' | 'submit' | 'manage';
 }
 
-// Module-level in-memory stores — exported so tests can seed them directly.
-// _formStore uses FormRecord from metadata-orchestrator (the canonical type).
+// ─── Durable Database Seeding & Mock Helpers ─────────────────────────────────
+
 export const _formStore = new Map<string, FormRecord>();
 export const _submissionStore = new Map<string, SubmissionRow>();
-/** Viewer permissions store: key is `${formId}:${granteeAddress}` */
 export const _viewerPermissionsStore = new Map<string, ViewerPermission>();
-const _uploadJobStore = new Map<string, UploadJobRecord>();
 
-/** Seed a form record for testing or cross-route use. Accepts a partial record and fills in defaults. */
-export function _seedForm(form: Pick<FormRecord, 'id' | 'privacyMode' | 'ownerAddress' | 'walrusBlobId'> & Partial<FormRecord>): void {
+export async function _seedForm(form: Pick<FormRecord, 'id' | 'privacyMode' | 'ownerAddress' | 'walrusBlobId'> & Partial<FormRecord>): Promise<void> {
   const full: FormRecord = {
     version: 1,
     predecessorId: null,
@@ -145,98 +143,63 @@ export function _seedForm(form: Pick<FormRecord, 'id' | 'privacyMode' | 'ownerAd
     contentDigest: 'a'.repeat(64),
     sizeBytes: 0,
     createdAt: new Date().toISOString(),
-    policyId: null,
+    policyId: form.privacyMode === 'private' ? 'mock-policy-id' : null,
     ...form,
   };
+  await db.insertForm(full);
   _formStore.set(full.id, full);
 }
 
-/** Seed a viewer permission for testing. */
-export function _seedViewerPermission(permission: ViewerPermission): void {
-  const key = `${permission.formId}:${permission.granteeAddress}`;
-  _viewerPermissionsStore.set(key, permission);
+async function ensureUserExists(address: string): Promise<void> {
+  await prisma.dbUser.upsert({
+    where: { address },
+    update: { lastSeenAt: new Date() },
+    create: {
+      address,
+      signerKind: 'zk-login',
+    },
+  });
 }
 
-/** Clear all in-memory state (used in tests). */
-export function _clearStores(): void {
+/** Seed a viewer permission in the database for testing. */
+export async function _seedViewerPermission(permission: ViewerPermission): Promise<void> {
+  const dummyGrantor = '0x' + 'ab'.repeat(32);
+  await ensureUserExists(permission.granteeAddress);
+  await ensureUserExists(dummyGrantor);
+
+  await prisma.dbPermission.upsert({
+    where: {
+      formId_granteeAddress_capability: {
+        formId: permission.formId,
+        granteeAddress: permission.granteeAddress,
+        capability: permission.capability,
+      },
+    },
+    update: {},
+    create: {
+      id: crypto.randomUUID(),
+      formId: permission.formId,
+      granteeAddress: permission.granteeAddress,
+      capability: permission.capability,
+      grantedByAddress: dummyGrantor,
+    },
+  });
+}
+
+/** Clear all database state (used in tests). */
+export async function _clearStores(): Promise<void> {
   _formStore.clear();
   _submissionStore.clear();
   _viewerPermissionsStore.clear();
-  _uploadJobStore.clear();
+  await prisma.$executeRawUnsafe('TRUNCATE TABLE forms, upload_jobs, submissions, files, users, activity, permissions CASCADE;');
 }
 
-/**
- * Db adapter backed by the in-memory stores above.
- * Passed to orchestrateSubmissionCreate() so the orchestrator can read/write
- * form and submission records without knowing about the route's store layout.
- */
-const inMemoryDb: Db = {
-  getForm: (id) => _formStore.get(id),
-  insertForm: (row) => { _formStore.set(row.id, row); return row; },
-  getSubmission: (id) => {
-    const row = _submissionStore.get(id);
-    if (!row) return undefined;
-    // Map SubmissionRow → SubmissionRecord (compatible shapes)
-    return {
-      id: row.id,
-      formId: row.formId,
-      formVersion: row.formVersion,
-      submitterAddress: row.submitterAddress,
-      walrusBlobId: row.walrusBlobId,
-      privacyMode: row.privacyMode,
-      contentDigest: row.contentDigest,
-      sizeBytes: row.sizeBytes,
-      state: row.state,
-      policyId: row.policyId ?? null,
-      createdAt: row.createdAt,
-    };
-  },
-  insertSubmission: (row) => {
-    const submissionRow: SubmissionRow = {
-      id: row.id,
-      formId: row.formId,
-      formVersion: row.formVersion,
-      submitterAddress: row.submitterAddress,
-      walrusBlobId: row.walrusBlobId,
-      privacyMode: row.privacyMode,
-      contentDigest: row.contentDigest,
-      sizeBytes: row.sizeBytes,
-      state: row.state,
-      policyId: row.policyId ?? undefined,
-      createdAt: row.createdAt,
-    };
-    _submissionStore.set(row.id, submissionRow);
-    return row;
-  },
-  getFile: (_id) => undefined,
-  insertFile: (row) => row,
-  insertUploadJob: (row) => { _uploadJobStore.set(row.id, row); return row; },
-  updateUploadJobState: (jobId, state, failureReason) => {
-    const job = _uploadJobStore.get(jobId);
-    if (job) {
-      job.state = state;
-      job.failureReason = failureReason ?? null;
-      job.updatedAt = new Date().toISOString();
-    }
-  },
-  findFormByBlob: (_ownerAddress, _walrusBlobId) => undefined,
-  findSubmissionByBlob: (formId, walrusBlobId) =>
-    Array.from(_submissionStore.values())
-      .map((row): SubmissionRecord => ({
-        id: row.id,
-        formId: row.formId,
-        formVersion: row.formVersion,
-        submitterAddress: row.submitterAddress,
-        walrusBlobId: row.walrusBlobId,
-        privacyMode: row.privacyMode,
-        contentDigest: row.contentDigest,
-        sizeBytes: row.sizeBytes,
-        state: row.state,
-        policyId: row.policyId ?? null,
-        createdAt: row.createdAt,
-      }))
-      .find((s) => s.formId === formId && s.walrusBlobId === walrusBlobId),
-};
+function toRow(s: SubmissionRecord): SubmissionRow {
+  return {
+    ...s,
+    policyId: s.policyId ?? undefined,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Zod validation schemas
@@ -344,11 +307,11 @@ export class ForbiddenError extends Error {
  *
  * @throws ForbiddenError if the actor is not authorized.
  */
-function assertDecryptionAuthorized(
+async function assertDecryptionAuthorized(
   actorAddress: string,
   submission: SubmissionRow,
-): void {
-  const form = _formStore.get(submission.formId);
+): Promise<void> {
+  const form = await db.getForm(submission.formId);
 
   // If the form record is missing, treat as rejection (Requirement 7.3)
   if (!form) {
@@ -366,9 +329,29 @@ function assertDecryptionAuthorized(
   }
 
   // Viewer permission check (capability = 'view')
-  const permKey = `${submission.formId}:${actorAddress}`;
-  const perm = _viewerPermissionsStore.get(permKey);
-  if (perm && (perm.capability === 'view' || perm.capability === 'manage')) {
+  const perm = await prisma.dbPermission.findUnique({
+    where: {
+      formId_granteeAddress_capability: {
+        formId: submission.formId,
+        granteeAddress: actorAddress,
+        capability: 'view',
+      },
+    },
+  });
+  if (perm) {
+    return; // authorized
+  }
+
+  const managePerm = await prisma.dbPermission.findUnique({
+    where: {
+      formId_granteeAddress_capability: {
+        formId: submission.formId,
+        granteeAddress: actorAddress,
+        capability: 'manage',
+      },
+    },
+  });
+  if (managePerm) {
     return; // authorized
   }
 
@@ -427,7 +410,7 @@ export function submissionsRouter(_config: ServerConfig): Router {
       //    The orchestrator validates privacy mode, handles encryption, Walrus
       //    upload, existence check, and metadata indexing.
       //    Requirements: 3.4, 4.2, 4.3, 4.5, 6.1–6.7
-      const submissionCountBefore = _submissionStore.size;
+      const submissionCountBefore = await prisma.dbSubmission.count();
       let result: import('../services/metadata-orchestrator').CreateSubmissionResult;
       try {
         // Parse the payload string as JSON if possible, otherwise pass as raw string.
@@ -452,7 +435,7 @@ export function submissionsRouter(_config: ServerConfig): Router {
             privacyMode: body.privacyMode,
           },
           body.submitterAddress,
-          inMemoryDb,
+          db,
         );
       } catch (orchErr) {
         if (orchErr instanceof FormNotFoundError) {
@@ -516,16 +499,19 @@ export function submissionsRouter(_config: ServerConfig): Router {
       }
 
       // 3. Retrieve the inserted submission row from the store
-      const submissionRow = _submissionStore.get(result.submissionId);
-      if (!submissionRow) {
+      const submissionRecord = await db.getSubmission(result.submissionId);
+      if (!submissionRecord) {
         // Should not happen — orchestrator inserts the row before returning
         const response = err('Internal', 'Submission was created but could not be retrieved.', 500, requestId);
         res.status(500).json(response);
         return;
       }
+      const submissionRow = toRow(submissionRecord);
+      _submissionStore.set(submissionRow.id, submissionRow);
 
       // Determine status: 200 for idempotent reconcile, 201 for new creation
-      const isIdempotent = _submissionStore.size === submissionCountBefore;
+      const submissionCountAfter = await prisma.dbSubmission.count();
+      const isIdempotent = submissionCountBefore === submissionCountAfter;
 
       const response = ok(submissionRow, isIdempotent ? 200 : 201, requestId);
       res.status(isIdempotent ? 200 : 201).json(response);
@@ -543,7 +529,7 @@ export function submissionsRouter(_config: ServerConfig): Router {
    *
    * Requirements: 7.2, 2.6
    */
-  router.get('/:id', (req: Request, res: Response, next: NextFunction) => {
+  router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
     const requestId = getRequestId(req);
 
     try {
@@ -555,14 +541,14 @@ export function submissionsRouter(_config: ServerConfig): Router {
         return;
       }
 
-      const submission = _submissionStore.get(id);
-      if (!submission) {
+      const submissionRecord = await db.getSubmission(id);
+      if (!submissionRecord) {
         const response = err('NotFound', `Submission ${id} not found.`, 404, requestId);
         res.status(404).json(response);
         return;
       }
 
-      const response = ok(submission, 200, requestId);
+      const response = ok(toRow(submissionRecord), 200, requestId);
       res.status(200).json(response);
     } catch (error) {
       next(error);
@@ -610,10 +596,7 @@ export function submissionsRouter(_config: ServerConfig): Router {
       }
 
       // ── Step 1: Auth session check ─────────────────────────────────────
-      // Extract the actor address from the session. In the current
-      // implementation the full ZK Login session middleware is wired in a
-      // later task; we read from `x-actor-address` as the session identity
-      // carrier. A missing or empty header is treated as unauthenticated.
+      // Extract the ZK Login session identity address.
       const actorAddress = (req.headers['x-actor-address'] as string | undefined)?.trim();
       if (!actorAddress) {
         const response = err(
@@ -627,12 +610,13 @@ export function submissionsRouter(_config: ServerConfig): Router {
       }
 
       // ── Step 2: Look up submission ─────────────────────────────────────
-      const submission = _submissionStore.get(id);
-      if (!submission) {
+      const submissionRecord = await db.getSubmission(id);
+      if (!submissionRecord) {
         const response = err('NotFound', `Submission ${id} not found.`, 404, requestId);
         res.status(404).json(response);
         return;
       }
+      const submission = toRow(submissionRecord);
 
       // ── Step 3: Public submission — fetch + verify + return plaintext ──
       if (submission.privacyMode === 'public') {
@@ -747,7 +731,7 @@ export function submissionsRouter(_config: ServerConfig): Router {
       // 4a. AUTHORIZATION CHECK — MUST precede sealDecrypt (Req 4.6, 12.3)
       // If authorization check itself errors, treat as rejection (Req 7.3).
       try {
-        assertDecryptionAuthorized(actorAddress, submission);
+        await assertDecryptionAuthorized(actorAddress, submission);
       } catch (authErr) {
         // Log the rejection without any payload content (Req 9.4, 9.11)
         console.warn(
@@ -1026,7 +1010,7 @@ export function submissionsRouter(_config: ServerConfig): Router {
    *
    * Requirements: 5.9, 7.2
    */
-  router.get('/', (req: Request, res: Response, next: NextFunction) => {
+  router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     const requestId = getRequestId(req);
 
     try {
@@ -1045,27 +1029,38 @@ export function submissionsRouter(_config: ServerConfig): Router {
 
       const { formId, submitterAddress, state, limit, offset } = queryResult.data;
 
-      let results = [..._submissionStore.values()];
-
-      // Apply filters
+      const where: any = {};
       if (formId !== undefined) {
-        results = results.filter((s) => s.formId === formId);
+        where.formId = formId;
       }
       if (submitterAddress !== undefined) {
-        results = results.filter((s) => s.submitterAddress === submitterAddress);
+        where.submitterAddress = submitterAddress;
       }
       if (state !== undefined) {
-        results = results.filter((s) => s.state === state);
+        where.state = state;
       }
 
-      // Sort by createdAt descending (newest first)
-      results.sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-      );
+      const total = await prisma.dbSubmission.count({ where });
+      const rows = await prisma.dbSubmission.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        skip: offset,
+      });
 
-      // Paginate
-      const total = results.length;
-      const page = results.slice(offset, offset + limit);
+      const page = rows.map((r) => toRow({
+        id: r.id,
+        formId: r.formId,
+        formVersion: r.formVersion,
+        submitterAddress: r.submitterAddress,
+        walrusBlobId: r.walrusBlobId,
+        privacyMode: r.privacyMode as any,
+        contentDigest: r.contentDigest,
+        sizeBytes: Number(r.sizeBytes),
+        state: r.state as any,
+        policyId: null,
+        createdAt: r.createdAt.toISOString(),
+      }));
 
       const response = ok(
         { submissions: page, total, limit, offset },

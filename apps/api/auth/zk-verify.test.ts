@@ -252,7 +252,7 @@ describe('verifyZkProof — structural validation', () => {
 describe('verifyZkProof — epoch validation', () => {
   it('returns invalid when maxEpoch < currentEpoch (expired session)', async () => {
     // Mock the Sui client to return epoch 200
-    _setSuiClient(makeMockSuiClient(200) as unknown as ReturnType<typeof makeMockSuiClient>);
+    _setSuiClient(makeMockSuiClient(200) as any);
 
     const envelope: ZkProofEnvelope = {
       assertedAddress: '0x1234',
@@ -274,7 +274,7 @@ describe('verifyZkProof — epoch validation', () => {
     // Mock the Sui client to throw
     _setSuiClient({
       getCurrentEpoch: vi.fn().mockRejectedValue(new Error('RPC unreachable')),
-    } as unknown as ReturnType<typeof makeMockSuiClient>);
+    } as any);
 
     const envelope: ZkProofEnvelope = {
       assertedAddress: '0x1234',
@@ -293,7 +293,7 @@ describe('verifyZkProof — epoch validation', () => {
 
   it('proceeds past epoch check when maxEpoch >= currentEpoch', async () => {
     // Mock epoch = 100, maxEpoch = 100 (equal — should pass epoch check)
-    _setSuiClient(makeMockSuiClient(100) as unknown as ReturnType<typeof makeMockSuiClient>);
+    _setSuiClient(makeMockSuiClient(100) as any);
 
     // This will still fail at address derivation since the proof is fake,
     // but it should NOT fail at the epoch check.
@@ -368,7 +368,7 @@ describe('verifyZkProof — security invariants', () => {
   });
 
   it('returns invalid for any mutation of assertedAddress', async () => {
-    _setSuiClient(makeMockSuiClient(100) as unknown as ReturnType<typeof makeMockSuiClient>);
+    _setSuiClient(makeMockSuiClient(100) as any);
 
     const base: ZkProofEnvelope = {
       assertedAddress: '0xabc123',
@@ -388,7 +388,7 @@ describe('verifyZkProof — security invariants', () => {
   });
 
   it('returns invalid for any mutation of maxEpoch', async () => {
-    _setSuiClient(makeMockSuiClient(100) as unknown as ReturnType<typeof makeMockSuiClient>);
+    _setSuiClient(makeMockSuiClient(100) as any);
 
     const base: ZkProofEnvelope = {
       assertedAddress: '0xabc123',
