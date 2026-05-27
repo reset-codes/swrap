@@ -11,5 +11,5 @@ process.env.WALRUS_PUBLISHER_URL = 'https://publisher.walrus-testnet.walrus.spac
 process.env.WALRUS_AGGREGATOR_URL = 'https://aggregator.walrus-testnet.walrus.space';
 process.env.SUI_RPC_URL = 'https://fullnode.testnet.sui.io:443';
 process.env.AUTH_SECRET = 'test-secret';
-process.env.DATABASE_URL = 'postgresql://abhinavrao@localhost:5432/test';
+process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://abhinavrao@localhost:5432/test';
 process.env.INFRA_WALLET_PRIVATE_KEY = 'suiprivkey1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq'; 
