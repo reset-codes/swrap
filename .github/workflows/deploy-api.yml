@@ -39,6 +39,22 @@ jobs:
     name: Test Suite
     runs-on: ubuntu-latest
     if: ${{ github.event.inputs.skip_tests != 'true' }}
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: swrap
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: swrap_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://swrap:password@localhost:5432/swrap_test
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -51,6 +67,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Push database schema
+        run: npx prisma db push --accept-data-loss
 
       - name: Type check
         # Pre-existing ESM/CJS interop errors in packages/sui and packages/seal source
