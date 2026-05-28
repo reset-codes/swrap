@@ -20,5 +20,6 @@ export default defineConfig({
     ],
     setupFiles: ['./vitest.setup.ts'],
     environment: 'node',
+    fileParallelism: false,
   },
 });
